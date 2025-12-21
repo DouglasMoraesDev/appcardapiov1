@@ -1,11 +1,11 @@
 ### Multi-stage Dockerfile para monorepo (frontend + backend)
-FROM node:18-alpine AS frontend-builder
+FROM node:20-bullseye-slim AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 COPY frontend/ .
 RUN npm ci --legacy-peer-deps && npm run build
 
-FROM node:18-alpine AS backend-builder
+FROM node:20-bullseye-slim AS backend-builder
 WORKDIR /app/backend
 COPY backend/package.json backend/package-lock.json* ./
 COPY backend/ .
@@ -15,11 +15,10 @@ COPY --from=frontend-builder /app/frontend/dist /frontend/dist
 # o script `npm --prefix ../frontend run build` do backend encontre os arquivos
 COPY --from=frontend-builder /app/frontend /app/frontend
 
-# Instala dependências (incluindo dev para compilação) e builda o backend
-# Usar `npm install` aqui porque o repositório pode não conter package-lock.json
-RUN npm install && npm run build && npm prune --production
+# Instala dependências e builda frontend + backend via script explícito
+RUN npm install && npm run build:all && npm prune --production
 
-FROM node:18-alpine AS runner
+FROM node:20-bullseye-slim AS runner
 WORKDIR /app
 # Copia artefatos de runtime
 COPY --from=backend-builder /app/backend/dist ./dist
@@ -29,4 +28,5 @@ COPY --from=frontend-builder /app/frontend/dist /frontend/dist
 
 ENV NODE_ENV=production
 EXPOSE 4000
+RUN apt-get update && apt-get install -y ca-certificates libssl1.1 || true && rm -rf /var/lib/apt/lists/*
 CMD ["node", "dist/index.js"]

@@ -38,7 +38,7 @@ const RegistrationView: React.FC = () => {
 
     (async () => {
       try {
-        const API = (import.meta.env.VITE_API_URL as string) || 'http://localhost:4000/api';
+        const API = (import.meta.env.VITE_API_URL as string) || '/api';
         const res = await fetch(`${API.replace(/\/$/, '')}/establishment`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -88,7 +88,7 @@ const RegistrationView: React.FC = () => {
   React.useEffect(() => {
     (async () => {
       try {
-        const API = (import.meta.env.VITE_API_URL as string) || 'http://localhost:4000/api';
+        const API = (import.meta.env.VITE_API_URL as string) || '/api';
         const res = await fetch(`${API.replace(/\/$/, '')}/establishment`);
         if (res.ok) {
           const body = await res.json();

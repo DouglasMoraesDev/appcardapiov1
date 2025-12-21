@@ -55,7 +55,7 @@ const INITIAL_THEME: ThemeConfig = {
   accent: "#c17a49"
 };
 
-const API_BASE = process.env?.VITE_API_URL || 'http://localhost:4000/api';
+const API_BASE = process.env?.VITE_API_URL || '/api';
 
 const INITIAL_PRODUCTS: Product[] = [];
 

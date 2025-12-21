@@ -17,13 +17,23 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 4000;
 
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || '';
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'https://appcardapiov1-production.up.railway.app';
 if (FRONTEND_ORIGIN) {
-	const allowedOrigins = FRONTEND_ORIGIN.split(',');
+	const allowedOrigins = FRONTEND_ORIGIN.split(',').map(s => s.trim()).filter(Boolean);
+	const allowedHostnames = allowedOrigins.map(o => {
+		try { return new URL(o).hostname; } catch { return o; }
+	});
 	app.use(cors({ origin: (origin, cb) => {
 		// allow non-browser requests (like curl, undefined origin)
 		if (!origin) return cb(null, true);
-		if (allowedOrigins.indexOf(origin) !== -1) return cb(null, true);
+		try {
+			const incomingHost = new URL(origin).hostname;
+			if (allowedHostnames.indexOf(incomingHost) !== -1) return cb(null, true);
+		} catch (e) {
+			// if origin is not a valid URL, fallthrough to string match
+			if (allowedOrigins.indexOf(origin) !== -1) return cb(null, true);
+		}
+		console.warn('CORS: rejected origin', origin);
 		return cb(new Error('Not allowed by CORS'));
 	}, credentials: true }));
 } else {

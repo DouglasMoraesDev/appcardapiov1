@@ -11,6 +11,9 @@ COPY backend/package.json backend/package-lock.json* ./
 COPY backend/ .
 # Copia build do frontend para o local esperado pelo backend em tempo de execução
 COPY --from=frontend-builder /app/frontend/dist /frontend/dist
+# Copia também a árvore de frontend (inclui package.json) para que
+# o script `npm --prefix ../frontend run build` do backend encontre os arquivos
+COPY --from=frontend-builder /app/frontend /app/frontend
 
 # Instala dependências (incluindo dev para compilação) e builda o backend
 # Usar `npm install` aqui porque o repositório pode não conter package-lock.json

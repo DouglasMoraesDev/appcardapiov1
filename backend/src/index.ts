@@ -18,13 +18,19 @@ const app = express();
 const port = process.env.PORT || 4000;
 
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || '';
-const allowedOrigins = FRONTEND_ORIGIN ? FRONTEND_ORIGIN.split(',') : ['http://localhost:3000', 'http://localhost:3001'];
-app.use(cors({ origin: (origin, cb) => {
-	// allow non-browser requests (like curl, undefined origin)
-	if (!origin) return cb(null, true);
-	if (allowedOrigins.indexOf(origin) !== -1) return cb(null, true);
-	return cb(new Error('Not allowed by CORS'));
-}, credentials: true }));
+if (FRONTEND_ORIGIN) {
+	const allowedOrigins = FRONTEND_ORIGIN.split(',');
+	app.use(cors({ origin: (origin, cb) => {
+		// allow non-browser requests (like curl, undefined origin)
+		if (!origin) return cb(null, true);
+		if (allowedOrigins.indexOf(origin) !== -1) return cb(null, true);
+		return cb(new Error('Not allowed by CORS'));
+	}, credentials: true }));
+} else {
+	// No FRONTEND_ORIGIN configured: allow any origin (reflect) to support
+	// serving frontend and assets from the same host in production.
+	app.use(cors({ origin: true, credentials: true }));
+}
 app.use(express.json());
 app.use(cookieParser());
 

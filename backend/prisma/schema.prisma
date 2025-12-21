@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+model Theme {
+  id         Int    @id @default(autoincrement())
+  background String
+  card       String
+  text       String
+  primary    String
+  accent     String
+  establishment Establishment?
+}
+
+model Establishment {
+  id            Int      @id @default(autoincrement())
+  name          String
+  address       String?
+  cep           String?
+  cpfCnpj       String?
+  logo          String?
+  serviceCharge Int      @default(10)
+  adminUserId   Int?    @unique
+  adminUser     User?    @relation(fields: [adminUserId], references: [id])
+  themeId       Int?     @unique
+  theme         Theme?   @relation(fields: [themeId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  username  String?  @unique
+  password  String?
+  role      String
+  pin       String?
+  createdAt DateTime @default(now())
+  establishment Establishment?
+  refreshTokens RefreshToken[]
+}
+
+model Category {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  products Product[]
+}
+
+model Product {
+  id          Int       @id @default(autoincrement())
+  name        String
+  description String?  @db.Text
+  price       Float
+  image       String?
+  categoryId  Int?
+  isHighlight Boolean   @default(false)
+  category    Category? @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime  @default(now())
+  orderItems   OrderItem[]
+}
+
+model Table {
+  id     Int    @id @default(autoincrement())
+  number Int    @unique
+  status String
+  orders Order[]
+}
+
+model Order {
+  id            Int         @id @default(autoincrement())
+  tableId       Int
+  table         Table       @relation(fields: [tableId], references: [id])
+  items         OrderItem[]
+  status        String
+  timestamp     DateTime    @default(now())
+  total         Float
+  serviceValue  Float?
+  servicePaid   Boolean     @default(false)
+  paymentMethod String?
+}
+
+model OrderItem {
+  id          Int     @id @default(autoincrement())
+  orderId     Int
+  order       Order   @relation(fields: [orderId], references: [id])
+  productId   Int?
+  product     Product? @relation(fields: [productId], references: [id])
+  quantity    Int
+  name        String
+  price       Float
+  status      String
+  observation String? @db.Text
+}
+
+model Feedback {
+  id          Int      @id @default(autoincrement())
+  tableNumber Int
+  rating      Int
+  comment     String? @db.Text
+  timestamp   DateTime @default(now())
+}
+
+model RefreshToken {
+  id         Int      @id @default(autoincrement())
+  token      String   @unique
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id])
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+}

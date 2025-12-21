@@ -1,0 +1,8 @@
+
+{
+  "name": "Playpub Campos do Jordão - Gestão de Restaurante",
+  "description": "Uma plataforma integrada para gestão de restaurantes, incluindo painel administrativo, interface para garçons e autoatendimento para clientes, com design inspirado na Cervejaria Campos do Jordão.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

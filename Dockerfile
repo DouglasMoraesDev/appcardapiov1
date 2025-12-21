@@ -13,7 +13,8 @@ COPY backend/ .
 COPY --from=frontend-builder /app/frontend/dist /frontend/dist
 
 # Instala dependências (incluindo dev para compilação) e builda o backend
-RUN npm ci && npm run build && npm prune --production
+# Usar `npm install` aqui porque o repositório pode não conter package-lock.json
+RUN npm install && npm run build && npm prune --production
 
 FROM node:18-alpine AS runner
 WORKDIR /app

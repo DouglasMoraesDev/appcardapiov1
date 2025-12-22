@@ -25,7 +25,7 @@
     "jsonwebtoken": "^9.0.0",
     "path": "^0.12.7",
     "express-rate-limit": "^6.7.0",
-    "zod": "^4.20.0"
+    "zod": "*"
   },
   "prisma": {
     "seed": "ts-node ./src/seed.ts"

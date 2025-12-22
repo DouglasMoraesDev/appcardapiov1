@@ -1,6 +1,9 @@
 ### Multi-stage Dockerfile para monorepo (frontend + backend)
-ARG VITE_API_URL
+# Provide a sensible default and ensure ARG is available in each stage
+ARG VITE_API_URL=http://localhost:4000
+
 FROM node:20-bullseye-slim AS frontend-builder
+ARG VITE_API_URL
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 COPY frontend/ .
@@ -8,6 +11,7 @@ ENV VITE_API_URL=${VITE_API_URL}
 RUN npm ci --legacy-peer-deps && npm run build
 
 FROM node:20-bullseye-slim AS backend-builder
+ARG VITE_API_URL
 ENV VITE_API_URL=${VITE_API_URL}
 WORKDIR /app/backend
 COPY backend/package.json backend/package-lock.json* ./
@@ -22,6 +26,7 @@ COPY --from=frontend-builder /app/frontend /app/frontend
 RUN npm install && npm run build:all && npm prune --production
 
 FROM node:20-bullseye-slim AS runner
+ARG VITE_API_URL
 ENV VITE_API_URL=${VITE_API_URL}
 WORKDIR /app
 # Copia artefatos de runtime

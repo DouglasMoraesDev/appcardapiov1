@@ -22,6 +22,10 @@ COPY --from=frontend-builder /app/frontend/dist /frontend/dist
 # o script `npm --prefix ../frontend run build` do backend encontre os arquivos
 COPY --from=frontend-builder /app/frontend /app/frontend
 
+# Remove lockfiles possivelmente conflitantes vindos do workspace para forçar
+# resolução a partir do `package.json` — evita travamento com versões não disponíveis
+RUN find . -maxdepth 3 -name 'package-lock.json' -type f -delete || true
+
 # Instala dependências e builda frontend + backend via script explícito
 RUN npm install && npm run build:all && npm prune --production
 

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { AuthRequest } from '../middleware/auth';
 import prisma from '../prisma';
 import { authenticate, authorize } from '../middleware/auth';
 import { setEstablishmentOnCreate, ensureResourceBelongsToUser } from '../middleware/multiTenant';
@@ -8,10 +9,10 @@ import { generalLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
-router.get('/', async (req, res) => {
+router.get('/', async (req: AuthRequest, res) => {
   try {
     const where: any = {};
-    if (req.user && req.user.establishmentId) where.establishmentId = Number(req.user.establishmentId);
+    if ((req as any).user && (req as any).user.establishmentId) where.establishmentId = Number((req as any).user.establishmentId);
     else if (req.query.establishmentId) where.establishmentId = Number(req.query.establishmentId as string);
     const products = await prisma.product.findMany({ where, include: { category: true } });
     res.json(products);

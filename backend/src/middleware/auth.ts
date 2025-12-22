@@ -21,7 +21,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     const user = await prisma.user.findUnique({ where: { id: decoded.userId }, include: { adminOf: true } as any });
     if (!user) return res.status(401).json({ error: 'User not found' });
     // determine establishmentId: explicit on user or via adminOf relation
-    const establishmentId = user.establishmentId ?? (user.adminOf ? user.adminOf.id : null);
+    const establishmentId = user.establishmentId ?? ((user as any).adminOf ? (user as any).adminOf.id : null);
     req.user = { id: user.id, name: user.name, role: user.role, establishmentId };
     next();
   } catch (err) {

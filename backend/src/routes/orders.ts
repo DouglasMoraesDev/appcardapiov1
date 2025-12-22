@@ -56,7 +56,7 @@ router.get('/', async (req, res) => {
       return res.json(orders);
     }
     // Authenticated users may request paid orders explicitly
-    let where = includePaid ? { tableId: Number(tableId) } : { tableId: Number(tableId), NOT: { status: 'PAID' } };
+    let where: any = includePaid ? { tableId: Number(tableId) } : { tableId: Number(tableId), NOT: { status: 'PAID' } };
     // restrict to user's establishment if authenticated
     if (user && (user.role === 'admin' || user.role === 'waiter')) {
       where = { ...where, establishmentId: Number(user.establishmentId) };

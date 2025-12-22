@@ -4,6 +4,36 @@ import { authenticate } from '../middleware/auth';
 
 const router = Router();
 
+// POST /api/admin/create-superadmin
+// Allows creating a superadmin either when no superadmin exists, or when a secret matches
+router.post('/create-superadmin', async (req, res) => {
+  try {
+    const { username, password, secret } = req.body || {};
+    if (!username || !password) return res.status(400).json({ error: 'username and password required' });
+
+    // If a secret is configured, require it
+    const configured = process.env.SUPER_ADMIN_SECRET;
+    if (configured) {
+      if (!secret || String(secret) !== String(configured)) return res.status(403).json({ error: 'Invalid secret' });
+    } else {
+      // if no secret configured, only allow creation if no superadmin exists
+      const exist = await prisma.user.count({ where: { role: 'superadmin' } });
+      if (exist > 0) return res.status(403).json({ error: 'Superadmin already exists' });
+    }
+
+    const bcrypt = require('bcryptjs');
+    const hashed = await bcrypt.hash(String(password), 10);
+    const user = await prisma.user.create({ data: { username: String(username), password: hashed, name: String(username), role: 'superadmin' } });
+    // create jwt for convenience in dev
+    const jwt = require('jsonwebtoken');
+    const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET || 'changeme', { expiresIn: '7d' });
+    return res.json({ id: user.id, username: user.username, token });
+  } catch (err) {
+    console.error('POST /admin/create-superadmin error', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Middleware: require superadmin role or match SUPER_ADMIN_USER_ID
 const requireSuperAdmin = (req: any, res: any, next: any) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
@@ -110,3 +140,4 @@ router.delete('/establishments/:id', authenticate, requireSuperAdmin, async (req
 });
 
 export default router;
+

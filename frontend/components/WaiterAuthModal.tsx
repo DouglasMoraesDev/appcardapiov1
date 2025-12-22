@@ -21,7 +21,8 @@ export default function WaiterAuthModal({ open, onClose, onSuccess }: Props) {
     setError('');
     setLoading(true);
     try {
-      const base = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:4000/api' : '/api';
+      const rawBase = (import.meta.env.VITE_API_URL as string) || '';
+      const base = rawBase ? rawBase.replace(/\/$/, '') + '/api' : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:4000/api' : '/api');
       const res = await fetch(`${base}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

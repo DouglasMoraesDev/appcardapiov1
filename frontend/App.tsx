@@ -5,6 +5,7 @@ import { AppProvider, useApp } from './store';
 import AdminDashboard from './views/AdminDashboard';
 import WaiterDashboard from './views/WaiterDashboard';
 import SuperAdminView from './views/SuperAdminView';
+import CreateSuperAdmin from './views/CreateSuperAdmin';
 import CustomerView from './views/CustomerView';
 import RegistrationView from './views/RegistrationView';
 import LoginView from './views/LoginView';
@@ -125,6 +126,7 @@ const App: React.FC = () => {
             <Route path="/" element={<SetupDevice />} />
             <Route path="/register-establishment" element={<RegistrationView />} />
             <Route path="/login/:role" element={<LoginView />} />
+            <Route path="/create-superadmin" element={<CreateSuperAdmin />} />
             <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
             <Route path="/superadmin" element={<SuperProtectedRoute><SuperAdminView /></SuperProtectedRoute>} />
             <Route path="/waiter" element={<ProtectedRoute role="waiter"><WaiterDashboard /></ProtectedRoute>} />

@@ -3,7 +3,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 
-dotenv.config({ path: 'backend/.env' });
+// Load env relative to this file so script works when run from any cwd
+dotenv.config({ path: __dirname + '/../../.env' });
 
 async function main() {
   const username = process.argv[2] || 'superadmin';

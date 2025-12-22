@@ -19,6 +19,11 @@ import path from 'path';
 dotenv.config();
 
 const app = express();
+// When running behind a proxy (Railway, Heroku, etc.) enable trust proxy so
+// express-rate-limit and cookie handling respect X-Forwarded-* headers.
+if (process.env.NODE_ENV === 'production') {
+	app.set('trust proxy', 1);
+}
 const port = process.env.PORT || 4000;
 
 // In production, require a non-default JWT secret to be set

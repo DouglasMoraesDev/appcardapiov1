@@ -59,7 +59,12 @@ const INITIAL_THEME: ThemeConfig = {
   accent: "#c17a49"
 };
 
-const API_BASE = process.env?.VITE_API_URL || '/api';
+const API_BASE = (() => {
+  const raw = (process.env?.VITE_API_URL as string) || '';
+  if (!raw) return '/api';
+  const cleaned = raw.replace(/\/$/, '');
+  return cleaned.endsWith('/api') ? cleaned : cleaned + '/api';
+})();
 
 const INITIAL_PRODUCTS: Product[] = [];
 

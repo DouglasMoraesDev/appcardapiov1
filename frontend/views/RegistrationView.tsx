@@ -38,8 +38,9 @@ const RegistrationView: React.FC = () => {
 
     (async () => {
       try {
-        const API = (import.meta.env.VITE_API_URL as string) || '/api';
-        const res = await fetch(`${API.replace(/\/$/, '')}/establishment`, {
+        const rawBase = (import.meta.env.VITE_API_URL as string) || '';
+        const API = rawBase ? (rawBase.replace(/\/$/, '').endsWith('/api') ? rawBase.replace(/\/$/, '') : rawBase.replace(/\/$/, '') + '/api') : '/api';
+        const res = await fetch(`${API}/establishment`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -88,8 +89,9 @@ const RegistrationView: React.FC = () => {
   React.useEffect(() => {
     (async () => {
       try {
-        const API = (import.meta.env.VITE_API_URL as string) || '/api';
-        const res = await fetch(`${API.replace(/\/$/, '')}/establishment`);
+        const rawBase = (import.meta.env.VITE_API_URL as string) || '';
+        const API = rawBase ? (rawBase.replace(/\/$/, '').endsWith('/api') ? rawBase.replace(/\/$/, '') : rawBase.replace(/\/$/, '') + '/api') : '/api';
+        const res = await fetch(`${API}/establishment`);
         if (res.ok) {
           const body = await res.json();
           if (body) {

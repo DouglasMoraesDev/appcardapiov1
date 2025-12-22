@@ -9,6 +9,9 @@ Uso rápido (PowerShell):
 
 - Rodar o script em modo desenvolvimento (aplica `prisma migrate dev`):
 
+
+
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup-and-migrate.ps1 -MigrateMode dev -BackupDB
 ```

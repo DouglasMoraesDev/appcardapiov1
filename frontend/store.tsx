@@ -479,9 +479,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     inFlightOrdersRef.current.add(key);
     try {
+      // Garantir que a mesa esteja em OCCUPIED antes de criar o pedido.
+      // Se a mesa estiver em AVAILABLE, o backend marca pedidos anteriores como PAID —
+      // chamando updateTableStatus antes da criação evitamos que o pedido recém-criado
+      // seja incluído nessa operação e ocultado do cliente.
+      try {
+        await updateTableStatus(tableId, TableStatus.OCCUPIED);
+      } catch (e) {
+        // falha ao atualizar status não deve impedir a criação do pedido
+        console.warn('updateTableStatus before create failed', e);
+      }
       const res = await fetchWithAuth(`${API_BASE}/orders`, { method: 'POST', body: JSON.stringify({ tableId: Number(tableId), items: normalizedItems, total: subtotal }) });
       const created = await res.json();
-      await updateTableStatus(String(created.tableId), TableStatus.OCCUPIED);
       // Após criar pedido, buscar novamente pedidos da mesa para garantir que os itens tenham o id correto do backend
       const pedidosRes = await fetchWithAuth(`${API_BASE}/orders?tableId=${tableId}`);
       if (pedidosRes.ok) {

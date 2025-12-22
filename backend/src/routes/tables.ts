@@ -37,9 +37,12 @@ router.put('/:id', async (req, res) => {
     // fetch current table to determine status transition
     const current = await prisma.table.findUnique({ where: { id } });
     const updated = await prisma.table.update({ where: { id }, data: payload });
-    // If table became AVAILABLE, mark its orders as PAID
+    // If table became AVAILABLE, mark its orders as PAID.
+    // Only mark orders that were created BEFORE the moment of transition to avoid
+    // affecting orders created concurrently after the status change.
     if (data && data.status === 'AVAILABLE') {
-      const orders = await prisma.order.findMany({ where: { tableId: id, NOT: { status: 'PAID' } } });
+      const transitionTime = new Date();
+      const orders = await prisma.order.findMany({ where: { tableId: id, NOT: { status: 'PAID' }, timestamp: { lt: transitionTime } } });
       const est = await prisma.establishment.findFirst();
       const serviceCharge = est?.serviceCharge ?? 0;
       for (const o of orders) {
@@ -48,9 +51,11 @@ router.put('/:id', async (req, res) => {
         await prisma.order.update({ where: { id: o.id }, data: { status: 'PAID', servicePaid: !!servicePaidFlag, serviceValue: svcVal } }).catch(() => null);
       }
     }
-    // If table transitioned from AVAILABLE -> OCCUPIED, ensure previous non-PAID orders are closed
+    // If table transitioned from AVAILABLE -> OCCUPIED, ensure previous non-PAID orders are closed.
+    // Only affect orders created before this transition moment.
     if (current && current.status === 'AVAILABLE' && data && data.status === 'OCCUPIED') {
-      await prisma.order.updateMany({ where: { tableId: id, NOT: { status: 'PAID' } }, data: { status: 'PAID' } }).catch(() => null);
+      const transitionTime = new Date();
+      await prisma.order.updateMany({ where: { tableId: id, NOT: { status: 'PAID' }, timestamp: { lt: transitionTime } }, data: { status: 'PAID' } }).catch(() => null);
     }
     // fetch updated orders for this table (including PAID) so frontend can display service values
     const updatedOrders = await prisma.order.findMany({ where: { tableId: id }, include: { items: true } });

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../store';
-import { TableStatus, OrderStatus } from '../types';
+import { TableStatus, OrderStatus, getTableStatusLabel, getOrderStatusLabel } from '../types';
 import { Bell, Grid, DollarSign, ChevronRight, X } from 'lucide-react';
 import PaymentConfirmModal from '../components/PaymentConfirmModal';
 import InfoModal from '../components/InfoModal';
@@ -144,7 +144,7 @@ const WaiterDashboard: React.FC = () => {
                     className={`w-full aspect-square flex flex-col items-center justify-center rounded-[2.5rem] border-2 transition-all relative ${table.status === TableStatus.CALLING_WAITER ? 'bg-red-900/40 border-red-500 text-white' : 'bg-[#0d1f15]'}`}
                   >
                     <span className="text-3xl lg:text-4xl font-serif font-bold">{table.number}</span>
-                    <span className="text-[8px] uppercase font-black mt-2 tracking-widest opacity-50">{table.status}</span>
+                    <span className="text-[8px] uppercase font-black mt-2 tracking-widest opacity-50">{getTableStatusLabel(table.status)}</span>
                     {table.status === TableStatus.CALLING_WAITER && (
                       <div className="absolute -top-1 -right-1 bg-red-500 p-2.5 rounded-full shadow-lg animate-bounce">
                         <Bell className="w-4 h-4 text-white" />
@@ -224,7 +224,7 @@ const WaiterDashboard: React.FC = () => {
                               <div className="text-[10px] text-gray-400">{item.observation || ''}</div>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className={`text-[10px] ${item.status==='DELIVERED' ? 'text-green-400' : 'text-yellow-300'}`}>{item.status==='DELIVERED' ? 'Entregue' : 'Pendente'}</span>
+                              <span className={`text-[10px] ${item.status==='DELIVERED' ? 'text-green-400' : 'text-yellow-300'}`}>{getOrderStatusLabel(item.status as any)}</span>
                               {item.status !== 'DELIVERED' && (
                                 <button onClick={async () => { try { await updateOrderItemStatus(order.id, item.id, 'DELIVERED'); const updated = await fetchOrdersByTable(selectedTable!); setTableOrders(updated || []); } catch(e){}}} className="px-3 py-1 bg-green-600 text-black rounded-full text-xs font-bold">Marcar Entregue</button>
                               )}

@@ -1,18 +1,31 @@
 import { Router } from 'express';
 import prisma from '../prisma';
+import { authenticate, authorize } from '../middleware/auth';
+import { sendEvent } from '../notifications';
+import { setEstablishmentOnCreate, ensureResourceBelongsToUser } from '../middleware/multiTenant';
+import { generalLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
 router.get('/', async (req, res) => {
-  const tables = await prisma.table.findMany();
-  res.json(tables);
+  try {
+    const where: any = {};
+    if ((req as any).user && (req as any).user.establishmentId) where.establishmentId = Number((req as any).user.establishmentId);
+    else if (req.query.establishmentId) where.establishmentId = Number(req.query.establishmentId as string);
+    const tables = await prisma.table.findMany({ where });
+    res.json(tables);
+  } catch (err) {
+    console.error('GET /tables error', err);
+    res.status(500).json({ error: 'Erro ao listar mesas' });
+  }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', authenticate, authorize(['admin','waiter']), setEstablishmentOnCreate, generalLimiter, async (req, res) => {
   const { number, status } = req.body;
   try {
-    const t = await prisma.table.create({ data: { number: Number(number), status: status || 'AVAILABLE' } });
+    const t = await prisma.table.create({ data: { number: Number(number), status: status || 'AVAILABLE', establishmentId: (req as any).body?.establishmentId } });
     res.json(t);
+    try { sendEvent('table_created', { tableId: t.id, number: t.number }); } catch (e) {}
   } catch (error: any) {
     if (error.code === 'P2002') {
       // Erro de chave única (mesa já existe)
@@ -23,7 +36,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticate, authorize(['admin','waiter']), ensureResourceBelongsToUser('table'), generalLimiter, async (req, res) => {
   const id = Number(req.params.id);
   const data = req.body;
   const servicePaidFlag = req.body.servicePaid as boolean | undefined;
@@ -42,8 +55,8 @@ router.put('/:id', async (req, res) => {
     // affecting orders created concurrently after the status change.
     if (data && data.status === 'AVAILABLE') {
       const transitionTime = new Date();
-      const orders = await prisma.order.findMany({ where: { tableId: id, NOT: { status: 'PAID' }, timestamp: { lt: transitionTime } } });
-      const est = await prisma.establishment.findFirst();
+      const orders = await prisma.order.findMany({ where: { tableId: id, NOT: { status: 'PAID' }, timestamp: { lt: transitionTime }, establishmentId: (req as any).user?.establishmentId ?? undefined } });
+      const est = await prisma.establishment.findUnique({ where: { id: (req as any).user?.establishmentId ?? undefined } });
       const serviceCharge = est?.serviceCharge ?? 0;
       for (const o of orders) {
         const serviceValue = Number(((o.total || 0) * (serviceCharge / 100)).toFixed(2));
@@ -55,10 +68,11 @@ router.put('/:id', async (req, res) => {
     // Only affect orders created before this transition moment.
     if (current && current.status === 'AVAILABLE' && data && data.status === 'OCCUPIED') {
       const transitionTime = new Date();
-      await prisma.order.updateMany({ where: { tableId: id, NOT: { status: 'PAID' }, timestamp: { lt: transitionTime } }, data: { status: 'PAID' } }).catch(() => null);
+      await prisma.order.updateMany({ where: { tableId: id, NOT: { status: 'PAID' }, timestamp: { lt: transitionTime }, establishmentId: (req as any).user?.establishmentId ?? undefined }, data: { status: 'PAID' } }).catch(() => null);
     }
     // fetch updated orders for this table (including PAID) so frontend can display service values
-    const updatedOrders = await prisma.order.findMany({ where: { tableId: id }, include: { items: true } });
+    const updatedOrders = await prisma.order.findMany({ where: { tableId: id, establishmentId: (req as any).user?.establishmentId ?? undefined }, include: { items: true } });
+    try { sendEvent('table_updated', { tableId: id }); } catch (e) {}
     return res.json({ updated, orders: updatedOrders });
   } catch (error: any) {
     return res.status(500).json({ error: 'Erro ao atualizar mesa', details: error.message });
@@ -66,7 +80,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // Atualiza o status de uma mesa
-router.post('/status', async (req, res) => {
+router.post('/status', authenticate, authorize(['admin','waiter']), ensureResourceBelongsToUser('table'), generalLimiter, async (req, res) => {
   const { id, status } = req.body;
   const servicePaidFlag = req.body.servicePaid as boolean | undefined;
   if (!id || !status) {
@@ -77,8 +91,8 @@ router.post('/status', async (req, res) => {
     const updated = await prisma.table.update({ where: { id: Number(id) }, data: { status } });
     // If table is being set to AVAILABLE, mark orders as PAID
     if (status === 'AVAILABLE') {
-      const orders = await prisma.order.findMany({ where: { tableId: Number(id), NOT: { status: 'PAID' } } });
-      const est = await prisma.establishment.findFirst();
+      const orders = await prisma.order.findMany({ where: { tableId: Number(id), NOT: { status: 'PAID' }, establishmentId: (req as any).user?.establishmentId ?? undefined } });
+      const est = await prisma.establishment.findUnique({ where: { id: (req as any).user?.establishmentId ?? undefined } });
       const serviceCharge = est?.serviceCharge ?? 0;
       for (const o of orders) {
         const serviceValue = Number(((o.total || 0) * (serviceCharge / 100)).toFixed(2));

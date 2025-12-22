@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import prisma from '../prisma';
 import { authenticate, authorize } from '../middleware/auth';
+import { generalLimiter } from '../middleware/rateLimiter';
+import { sendEvent } from '../notifications';
+import { z } from 'zod';
+import { validateBody } from '../middleware/validate';
 
 const router = Router();
 
@@ -52,7 +56,11 @@ router.get('/', async (req, res) => {
       return res.json(orders);
     }
     // Authenticated users may request paid orders explicitly
-    const where = includePaid ? { tableId: Number(tableId) } : { tableId: Number(tableId), NOT: { status: 'PAID' } };
+    let where = includePaid ? { tableId: Number(tableId) } : { tableId: Number(tableId), NOT: { status: 'PAID' } };
+    // restrict to user's establishment if authenticated
+    if (user && (user.role === 'admin' || user.role === 'waiter')) {
+      where = { ...where, establishmentId: Number(user.establishmentId) };
+    }
     const orders = await prisma.order.findMany({ where, include: { items: true } });
     return res.json(orders);
   }
@@ -66,22 +74,36 @@ router.get('/', async (req, res) => {
   return res.status(403).json({ error: 'Acesso negado' });
 });
 
-router.post('/', async (req, res) => {
+const orderSchema = z.object({
+  tableId: z.number(),
+  items: z.array(z.object({ productId: z.number().optional(), quantity: z.number(), name: z.string(), price: z.number(), status: z.string().optional(), observation: z.string().nullable().optional() })),
+  status: z.string().optional(),
+  total: z.number().optional(),
+  paymentMethod: z.string().nullable().optional()
+});
+
+router.post('/', generalLimiter, validateBody(orderSchema), async (req, res) => {
   const { tableId, items, status, total, paymentMethod } = req.body;
+  // attach establishmentId from table to order
+  const table = await prisma.table.findUnique({ where: { id: Number(tableId) } });
+  const establishmentId = table?.establishmentId ?? null;
   const order = await prisma.order.create({
     data: {
       tableId: Number(tableId),
       status: status || 'PENDING',
       total: Number(total) || 0,
       paymentMethod: paymentMethod || null,
+      establishmentId: establishmentId,
       items: { create: items.map((it: any) => ({ productId: it.productId ? Number(it.productId) : undefined, quantity: Number(it.quantity), name: it.name, price: Number(it.price), status: it.status || 'PENDING', observation: it.observation || null })) }
     },
     include: { items: true }
   });
   res.json(order);
+  // notify clients about new order
+  try { sendEvent('order_created', { orderId: order.id, tableId: order.tableId }); } catch (e) {}
 });
 
-router.put('/:id/status', authenticate, authorize(['admin','waiter']), async (req, res) => {
+router.put('/:id/status', generalLimiter, authenticate, authorize(['admin','waiter']), async (req, res) => {
   const id = Number(req.params.id);
   const { status, servicePaid } = req.body as { status: string; servicePaid?: boolean };
   try {
@@ -96,6 +118,8 @@ router.put('/:id/status', authenticate, authorize(['admin','waiter']), async (re
       return res.json(updated);
     }
     const updated = await prisma.order.update({ where: { id }, data: { status } });
+    // notify order updated
+    try { sendEvent('order_updated', { orderId: updated.id, tableId: updated.tableId, status: updated.status }); } catch (e) {}
     return res.json(updated);
   } catch (err: any) {
     console.error('PUT /orders/:id/status error', err);
@@ -103,7 +127,7 @@ router.put('/:id/status', authenticate, authorize(['admin','waiter']), async (re
   }
 });
 
-router.put('/:id/items/:itemId/status', authenticate, authorize(['admin','waiter']), async (req, res) => {
+router.put('/:id/items/:itemId/status', generalLimiter, authenticate, authorize(['admin','waiter']), async (req, res) => {
   const id = Number(req.params.id);
   const itemId = Number(req.params.itemId);
   const { status } = req.body;
@@ -118,6 +142,7 @@ router.put('/:id/items/:itemId/status', authenticate, authorize(['admin','waiter
     else if (anyDelivered) newStatus = 'PARTIAL';
     await prisma.order.update({ where: { id }, data: { status: newStatus } });
     const orderWithItems = await prisma.order.findUnique({ where: { id }, include: { items: true } });
+    try { sendEvent('order_updated', { orderId: orderWithItems?.id, tableId: orderWithItems?.tableId, status: orderWithItems?.status }); } catch (e) {}
     return res.json(orderWithItems);
   } catch (err) {
     console.error('Failed to recalc order status after item update', err);

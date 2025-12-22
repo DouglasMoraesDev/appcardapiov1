@@ -18,9 +18,11 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
   try {
     const decoded: any = jwt.verify(token, JWT_SECRET);
     if (!decoded || !decoded.userId) return res.status(401).json({ error: 'Token invalid' });
-    const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId }, include: { adminOf: true } as any });
     if (!user) return res.status(401).json({ error: 'User not found' });
-    req.user = { id: user.id, name: user.name, role: user.role };
+    // determine establishmentId: explicit on user or via adminOf relation
+    const establishmentId = user.establishmentId ?? (user.adminOf ? user.adminOf.id : null);
+    req.user = { id: user.id, name: user.name, role: user.role, establishmentId };
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Token invalid' });

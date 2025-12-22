@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
+import logger from './logger';
 import productsRouter from './routes/products';
 import categoriesRouter from './routes/categories';
 import usersRouter from './routes/users';
@@ -9,7 +10,10 @@ import tablesRouter from './routes/tables';
 import ordersRouter from './routes/orders';
 import feedbacksRouter from './routes/feedbacks';
 import establishmentRouter from './routes/establishment';
+import adminRouter from './routes/admin';
 import authRouter from './routes/auth';
+import debugRouter from './routes/debug';
+import { registerClient } from './notifications';
 import path from 'path';
 
 dotenv.config();
@@ -17,9 +21,23 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 4000;
 
+// In production, require a non-default JWT secret to be set
+if (process.env.NODE_ENV === 'production') {
+	const jwtSecret = process.env.JWT_SECRET;
+	if (!jwtSecret || jwtSecret === 'changeme') {
+		console.error('FATAL: JWT_SECRET is not set or is using the default value. Aborting startup.');
+		process.exit(1);
+	}
+}
+
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'https://appcardapiov1-production.up.railway.app';
 if (FRONTEND_ORIGIN) {
+	// build allowed origins list from env; during development also allow localhost
 	const allowedOrigins = FRONTEND_ORIGIN.split(',').map(s => s.trim()).filter(Boolean);
+	if (process.env.NODE_ENV !== 'production') {
+		// permissões locais úteis para desenvolvimento (não afeta produção)
+		allowedOrigins.push('http://localhost:3000', 'http://127.0.0.1:5173');
+	}
 	const allowedHostnames = allowedOrigins.map(o => {
 		try { return new URL(o).hostname; } catch { return o; }
 	});
@@ -52,6 +70,13 @@ app.use('/api/orders', ordersRouter);
 app.use('/api/feedbacks', feedbacksRouter);
 app.use('/api/establishment', establishmentRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/debug', debugRouter);
+app.use('/api/admin', adminRouter);
+
+// Notifications stream (SSE)
+app.get('/api/notifications/stream', (req, res) => {
+	registerClient(res);
+});
 
 // API root
 app.get('/api', (req, res) => res.send({ ok: true, api: '/api' }));
@@ -70,3 +95,9 @@ try {
 }
 
 app.listen(port, () => console.log(`Server running on port ${port}`));
+// Generic error handler
+app.use((err: any, req: any, res: any, next: any) => {
+	logger.error(err);
+	if (res.headersSent) return next(err);
+	return res.status(500).json({ error: 'Internal server error' });
+});

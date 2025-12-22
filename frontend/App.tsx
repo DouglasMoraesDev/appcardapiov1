@@ -4,6 +4,7 @@ import * as ReactRouterDOM from 'react-router-dom';
 import { AppProvider, useApp } from './store';
 import AdminDashboard from './views/AdminDashboard';
 import WaiterDashboard from './views/WaiterDashboard';
+import SuperAdminView from './views/SuperAdminView';
 import CustomerView from './views/CustomerView';
 import RegistrationView from './views/RegistrationView';
 import LoginView from './views/LoginView';
@@ -12,11 +13,17 @@ import { LogOut, LayoutDashboard, UserCheck, Utensils, Settings } from 'lucide-r
 
 const { HashRouter, Routes, Route, Link, useNavigate, useLocation, Navigate } = ReactRouterDOM;
 
-const ProtectedRoute: React.FC<{ children: React.ReactNode, role: 'admin' | 'waiter' }> = ({ children, role }) => {
+const ProtectedRoute: React.FC<{ children: React.ReactNode, role: 'admin' | 'waiter' | 'superadmin' }> = ({ children, role }) => {
   const { currentUser } = useApp();
   if (!currentUser || currentUser.role !== role) {
     return <Navigate to={`/login/${role}`} replace />;
   }
+  return <>{children}</>;
+};
+
+const SuperProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentUser } = useApp();
+  if (!currentUser || currentUser.role !== 'superadmin') return <Navigate to={'/login/admin'} replace />;
   return <>{children}</>;
 };
 
@@ -119,6 +126,7 @@ const App: React.FC = () => {
             <Route path="/register-establishment" element={<RegistrationView />} />
             <Route path="/login/:role" element={<LoginView />} />
             <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
+            <Route path="/superadmin" element={<SuperProtectedRoute><SuperAdminView /></SuperProtectedRoute>} />
             <Route path="/waiter" element={<ProtectedRoute role="waiter"><WaiterDashboard /></ProtectedRoute>} />
             <Route path="/abrir-mesa" element={<ProtectedRoute role="waiter"><MesaAberturaView onMesaAberta={() => window.location.hash = '#/mesa'}/></ProtectedRoute>} />
             <Route path="/mesa" element={<ProtectedRoute role="waiter"><CustomerView /></ProtectedRoute>} />

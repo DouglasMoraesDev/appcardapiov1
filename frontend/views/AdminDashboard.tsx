@@ -4,7 +4,7 @@ import { Plus, Trash2, Edit3, Beer, Users, Grid, DollarSign, Image as ImageIcon,
 import ConfirmModal from '../components/ConfirmModal';
 import InfoModal from '../components/InfoModal';
 import PaymentConfirmModal from '../components/PaymentConfirmModal';
-import { TableStatus } from '../types';
+import { TableStatus, getTableStatusLabel } from '../types';
 import { Product } from '../types';
 
 
@@ -35,8 +35,9 @@ const AdminDashboard: React.FC = () => {
   const [waiterPassword, setWaiterPassword] = useState('');
   const [categoryName, setCategoryName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [closedTables, setClosedTables] = useState<any[]>([]);
-  const [isLoadingClosed, setIsLoadingClosed] = useState(false);
+  
+  const [serviceModalOpen, setServiceModalOpen] = useState(false);
+  const [npsModalOpen, setNpsModalOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
   const [waiterToDelete, setWaiterToDelete] = useState<string | null>(null);
@@ -172,27 +173,24 @@ const AdminDashboard: React.FC = () => {
               <p className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">Receita Total</p>
               <p className="text-3xl font-serif text-[#d18a59] mt-2">R$ {totalRevenue.toFixed(2)}</p>
             </div>
-            <div className="bg-[#0d1f15] p-6 rounded-3xl border border-white/5 relative overflow-hidden group">
+            <button onClick={() => setServiceModalOpen(true)} className="bg-[#0d1f15] p-6 rounded-3xl border border-white/5 relative overflow-hidden group text-left">
               <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform"><DollarSign className="w-12 h-12" /></div>
               <p className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">Taxa de Serviço (Total)</p>
               <p className="text-3xl font-serif text-[#d18a59] mt-2">R$ {totalService.toFixed(2)}</p>
-            </div>
+              <p className="text-xs text-gray-400 mt-2">Clique para ver detalhes das mesas que pagaram</p>
+            </button>
             <div className="bg-[#0d1f15] p-6 rounded-3xl border border-white/5 relative overflow-hidden group">
               <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform"><ShoppingBag className="w-12 h-12" /></div>
               <p className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">Pedidos</p>
               <p className="text-3xl font-serif text-white mt-2">{orders.length}</p>
             </div>
-            <div className="bg-[#0d1f15] p-6 rounded-3xl border border-white/5 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform"><DollarSign className="w-12 h-12" /></div>
-              <p className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">Ticket Médio</p>
-              <p className="text-3xl font-serif text-white mt-2">R$ {averageTicket.toFixed(2)}</p>
-              <p className="text-[10px] text-gray-400 mt-2">Ticket médio = Receita Total / Nº de Pedidos</p>
-            </div>
-            <div className="bg-[#0d1f15] p-6 rounded-3xl border border-white/5 relative overflow-hidden group">
+            {/* Ticket Médio removido per user request */}
+            <button onClick={() => setNpsModalOpen(true)} className="bg-[#0d1f15] p-6 rounded-3xl border border-white/5 relative overflow-hidden group text-left">
               <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform"><Star className="w-12 h-12" /></div>
               <p className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">NPS Médio</p>
               <p className="text-3xl font-serif text-white mt-2">{averageRating.toFixed(1)} <span className="text-xs">★</span></p>
-            </div>
+              <p className="text-xs text-gray-400 mt-2">Clique para ver avaliações recentes</p>
+            </button>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -299,7 +297,7 @@ const AdminDashboard: React.FC = () => {
                 <div key={table.id} className="bg-[#0d1f15] p-6 rounded-2xl border border-white/5 flex justify-between items-center">
                   <div>
                     <h4 className="text-lg font-bold text-white">Mesa {table.number}</h4>
-                    <p className="text-xs text-gray-400">Status: {table.status} • Pedidos: {tableOrders.length}</p>
+                    <p className="text-xs text-gray-400">Status: {getTableStatusLabel(table.status)} • Pedidos: {tableOrders.length}</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="text-right">
@@ -374,6 +372,87 @@ const AdminDashboard: React.FC = () => {
         }
         setFinalizingTableId(null);
       }} onCancel={() => { setPaymentModalOpen(false); setFinalizingTableId(null); }} />
+
+      {serviceModalOpen && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/60">
+          <div className="bg-[#0d1f15] w-full max-w-2xl rounded-2xl border border-white/5 p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-serif text-white">Detalhes da Taxa de Serviço</h3>
+              <button onClick={() => setServiceModalOpen(false)} className="text-gray-400 hover:text-white">Fechar</button>
+            </div>
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+              {(() => {
+                const paidOrders = orders.filter(o => o.status === 'PAID' && o.servicePaid);
+                const grouped: Record<string, { tableNumber?: number; totalService: number; orders: any[] }> = {};
+                for (const o of paidOrders) {
+                  const tid = String(o.tableId);
+                  if (!grouped[tid]) grouped[tid] = { tableNumber: undefined, totalService: 0, orders: [] };
+                  grouped[tid].orders.push(o);
+                  grouped[tid].totalService += Number(o.serviceValue || 0);
+                  const table = tables.find(t => String(t.id) === tid);
+                  if (table) grouped[tid].tableNumber = table.number;
+                }
+                const rows = Object.entries(grouped);
+                if (rows.length === 0) return <div className="text-gray-500">Nenhuma mesa registrou pagamento de taxa.</div>;
+                return rows.map(([tid, g]) => (
+                  <div key={tid} className="bg-[#06120c] p-4 rounded-lg border border-white/5">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="text-sm text-gray-300 font-bold">Mesa {g.tableNumber ?? tid}</div>
+                        <div className="text-[11px] text-gray-500">Pedidos: {g.orders.length}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm text-gray-400">Serviço pago</div>
+                        <div className="text-lg font-serif text-[#d18a59]">R$ {g.totalService.toFixed(2)}</div>
+                      </div>
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {npsModalOpen && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/60">
+          <div className="bg-[#0d1f15] w-full max-w-2xl rounded-2xl border border-white/5 p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-serif text-white">Detalhes do NPS</h3>
+              <button onClick={() => setNpsModalOpen(false)} className="text-gray-400 hover:text-white">Fechar</button>
+            </div>
+            <div className="mb-4">
+              <div className="flex items-center gap-4">
+                <div className="text-4xl font-serif text-[#d18a59]">{averageRating.toFixed(1)} <span className="text-sm">★</span></div>
+                <div className="text-sm text-gray-400">Média baseada em {feedbacks.length} avaliações</div>
+              </div>
+            </div>
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+              {feedbacks.length === 0 ? (
+                <div className="text-gray-500">Nenhuma avaliação disponível.</div>
+              ) : (
+                feedbacks.slice().sort((a,b)=> new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0,8).map(f => (
+                  <div key={f.id} className="bg-[#06120c] p-4 rounded-lg border border-white/5">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm font-bold text-gray-200">Mesa {f.tableNumber}</div>
+                          <div className="text-xs text-gray-500">• {new Date(f.timestamp).toLocaleString()}</div>
+                        </div>
+                        <div className="text-sm text-gray-300 mt-2 italic">"{f.comment || 'Sem comentário.'}"</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm text-gray-400">Nota</div>
+                        <div className="text-lg font-serif text-[#d18a59]">{f.rating} <span className="text-xs">★</span></div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {editingProduct && (
         <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -640,36 +719,7 @@ const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {activeTab === 'closed' && (
-        <div className="space-y-6">
-          <h3 className="text-2xl font-serif text-white">Relatório de Mesas Fechadas (Hoje)</h3>
-          {isLoadingClosed ? (
-            <div className="py-10 text-center text-gray-500">Carregando...</div>
-          ) : closedTables.length === 0 ? (
-            <div className="py-10 text-center text-gray-500">Nenhuma mesa fechada hoje.</div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {closedTables.map((mesa: any) => (
-                <div key={mesa.tableNumber} className="bg-[#0d1f15] p-6 rounded-3xl border border-white/5 space-y-4">
-                  <h4 className="text-xl font-serif text-[#d18a59]">Mesa {mesa.tableNumber}</h4>
-                  <p className="text-gray-400 text-xs">Total: <span className="font-bold text-[#d18a59]">R$ {mesa.total.toFixed(2)}</span></p>
-                  <div className="space-y-2">
-                    {mesa.orders.map((order: any) => (
-                      <div key={order.id} className="bg-black/10 p-3 rounded-xl">
-                        <div className="flex justify-between text-xs">
-                          <span>Pedido #{order.id}</span>
-                          <span className="font-bold text-[#d18a59]">R$ {order.total.toFixed(2)}</span>
-                        </div>
-                        <div className="text-[10px] text-gray-500">{order.items.map((item: any) => `${item.quantity}x ${item.name}`).join(', ')}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Relatório de Mesas Fechadas (Hoje) removido — usamos a lista de Mesas Finalizadas acima */}
 
       {isAddingProduct && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">

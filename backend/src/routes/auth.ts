@@ -4,6 +4,9 @@ import prisma from '../prisma';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { authLimiter } from '../middleware/rateLimiter';
+import { z } from 'zod';
+import { validateBody } from '../middleware/validate';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
@@ -15,11 +18,9 @@ function makeRefreshToken(){
 }
 
 // Registro de novo usuário
-router.post('/register', async (req, res) => {
+const registerSchema = z.object({ username: z.string(), password: z.string().min(6), name: z.string(), role: z.string() });
+router.post('/register', validateBody(registerSchema), async (req, res) => {
   const { username, password, name, role } = req.body;
-  if (!username || !password || !name || !role) {
-    return res.status(400).json({ error: 'username, password, name e role são obrigatórios' });
-  }
   try {
     // Verifica se já existe usuário com esse username
     const exists = await prisma.user.findFirst({ where: { username } });
@@ -35,13 +36,14 @@ router.post('/register', async (req, res) => {
   }
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   const { username, password, role } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
 
   const user = await prisma.user.findFirst({ where: { username } });
   if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-  const match = (user.password === password) || await bcrypt.compare(password, user.password || '');
+  // Always compare with bcrypt; disallow plaintext password comparison for security.
+  const match = user.password ? await bcrypt.compare(password, user.password) : false;
   if (!match) return res.status(401).json({ error: 'Invalid credentials' });
 
   // role enforcement
@@ -56,15 +58,23 @@ router.post('/login', async (req, res) => {
   // clear any previous cookie set on different paths to evitar duplicatas
   res.clearCookie('refreshToken', { path: '/' });
   res.clearCookie('refreshToken', { path: '/api/auth' });
-  res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: false, sameSite: 'lax', path: '/', expires: expiresAt });
+  res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', expires: expiresAt });
 
-  res.json({ accessToken, user: { id: user.id, name: user.name, role: user.role } });
+  // In development, also return the refresh token in the body to help dev clients (not for production)
+  const body: any = { accessToken, user: { id: user.id, name: user.name, role: user.role } };
+  if (process.env.NODE_ENV !== 'production') body.refreshToken = refreshToken;
+  res.json(body);
 });
 
-router.post('/refresh', async (req, res) => {
-  const token = req.cookies?.refreshToken;
+router.post('/refresh', authLimiter, async (req, res) => {
+  // Accept refresh token from cookie, request body or header to help dev workflows
+  const token = req.cookies?.refreshToken || req.body?.refreshToken || req.headers['x-refresh-token'] as string | undefined || req.query?.token as string | undefined;
+  try {
+    console.debug('[auth/refresh] incoming token present?', !!token, 'cookie?', !!req.cookies?.refreshToken, 'body?', !!req.body?.refreshToken, 'header?', !!req.headers['x-refresh-token']);
+  } catch(e){}
   if (!token) return res.status(401).json({ error: 'No refresh token' });
   const db = await prisma.refreshToken.findUnique({ where: { token } });
+  try { console.debug('[auth/refresh] db token found?', !!db); } catch(e){}
   if (!db) return res.status(401).json({ error: 'Invalid refresh token' });
   if (db.expiresAt < new Date()) {
     await prisma.refreshToken.delete({ where: { id: db.id } });
@@ -83,9 +93,11 @@ router.post('/refresh', async (req, res) => {
   await prisma.refreshToken.deleteMany({ where: { id: db.id } });
   res.clearCookie('refreshToken', { path: '/' });
   res.clearCookie('refreshToken', { path: '/api/auth' });
-  res.cookie('refreshToken', newRefresh, { httpOnly: true, secure: false, sameSite: 'lax', path: '/', expires: newExpires });
+  res.cookie('refreshToken', newRefresh, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', expires: newExpires });
 
-  res.json({ accessToken, user: { id: user.id, name: user.name, role: user.role } });
+  const bodyOut: any = { accessToken, user: { id: user.id, name: user.name, role: user.role } };
+  if (process.env.NODE_ENV !== 'production') bodyOut.refreshToken = newRefresh;
+  res.json(bodyOut);
 });
 
 router.post('/logout', async (req, res) => {

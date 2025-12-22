@@ -25,11 +25,17 @@ model Establishment {
   logo          String?
   serviceCharge Int      @default(10)
   adminUserId   Int?    @unique
-  adminUser     User?    @relation(fields: [adminUserId], references: [id])
+  adminUser     User?    @relation(name: "EstablishmentAdmin", fields: [adminUserId], references: [id])
   themeId       Int?     @unique
   theme         Theme?   @relation(fields: [themeId], references: [id])
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  users         User[]    @relation(name: "UserEstablishment")
+  categories    Category[]
+  products      Product[]
+  tables        Table[]
+  orders        Order[]
+  feedbacks     Feedback[]
 }
 
 model User {
@@ -39,15 +45,20 @@ model User {
   password  String?
   role      String
   pin       String?
+  establishmentId Int?
+  establishment Establishment? @relation(name: "UserEstablishment", fields: [establishmentId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
-  establishment Establishment?
   refreshTokens RefreshToken[]
+  adminOf Establishment? @relation(name: "EstablishmentAdmin")
 }
 
 model Category {
   id       Int       @id @default(autoincrement())
   name     String    @unique
   products Product[]
+  establishmentId Int?
+  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  @@index([establishmentId])
 }
 
 model Product {
@@ -61,6 +72,9 @@ model Product {
   category    Category? @relation(fields: [categoryId], references: [id])
   createdAt   DateTime  @default(now())
   orderItems   OrderItem[]
+  establishmentId Int?
+  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  @@index([establishmentId])
 }
 
 model Table {
@@ -68,6 +82,9 @@ model Table {
   number Int    @unique
   status String
   orders Order[]
+  establishmentId Int?
+  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  @@index([establishmentId])
 }
 
 model Order {
@@ -81,6 +98,10 @@ model Order {
   serviceValue  Float?
   servicePaid   Boolean     @default(false)
   paymentMethod String?
+  establishmentId Int?
+  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  @@index([establishmentId])
+  @@map("orders")
 }
 
 model OrderItem {
@@ -102,13 +123,16 @@ model Feedback {
   rating      Int
   comment     String? @db.Text
   timestamp   DateTime @default(now())
+  establishmentId Int?
+  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  @@index([establishmentId])
 }
 
 model RefreshToken {
   id         Int      @id @default(autoincrement())
   token      String   @unique
   userId     Int
-  user       User     @relation(fields: [userId], references: [id])
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt  DateTime
   createdAt  DateTime @default(now())
 }

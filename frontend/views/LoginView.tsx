@@ -28,9 +28,12 @@ const LoginView: React.FC = () => {
         return;
       }
       setAccessToken(data.accessToken);
+      // in development we may receive a refreshToken in the body to help with cookie issues
+      try { if (data.refreshToken) { localStorage.setItem('refreshTokenDev', data.refreshToken); } } catch(e) {}
       setCurrentUser({ id: String(data.user.id), name: data.user.name, role: data.user.role, username } as any);
       try { localStorage.setItem('hasRefresh', '1'); } catch(e) {}
       if (data.user.role === 'admin') navigate('/admin');
+      else if (data.user.role === 'superadmin') navigate('/superadmin');
       else if (data.user.role === 'waiter') navigate('/waiter');
     } catch (err) {
       console.error(err);

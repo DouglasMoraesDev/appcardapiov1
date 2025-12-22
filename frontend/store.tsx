@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import InfoModal from './components/InfoModal';
+import Toasts from './components/Toasts';
 import { Product, Table, Order, TableStatus, OrderStatus, Establishment, User, OrderItem, Feedback, ThemeConfig } from './types';
 
 interface AppContextType {
@@ -24,6 +25,9 @@ interface AppContextType {
   logout: () => Promise<void>;
   deviceTableId: string | null;
   setDeviceTableId: (id: string | null) => void;
+  addToast: (t: { title?: string; message: string; persist?: boolean }) => void;
+  soundEnabled: boolean;
+  setSoundEnabled: (v: boolean) => void;
 
   // Novo: buscar pedidos de uma mesa sem sobrescrever o global
   fetchOrdersByTable: (tableId: string) => Promise<Order[]>;
@@ -76,16 +80,120 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isInitialized, setIsInitialized] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoMessage, setInfoMessage] = useState<string | undefined>(undefined);
+  const [toasts, setToasts] = useState<Array<{ id: string; title?: string; message: string; persist?: boolean }>>([]);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    try { return localStorage.getItem('soundEnabled') !== '0'; } catch (e) { return true; }
+  });
 
   const showInfo = (msg: string) => {
     setInfoMessage(msg);
     setInfoOpen(true);
   };
 
+  const addToast = (toast: { title?: string; message: string; persist?: boolean }) => {
+    const id = String(Date.now()) + Math.random().toString(36).slice(2,8);
+    setToasts(prev => [...prev, { id, ...toast }]);
+    if (!toast.persist) {
+      setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
+    }
+  };
+
+  const dismissToast = (id: string) => setToasts(prev => prev.filter(t => t.id !== id));
+
+  const setSound = (v: boolean) => { try { localStorage.setItem('soundEnabled', v ? '1' : '0'); } catch(e){}; setSoundEnabled(v); };
+
   // Track in-flight order submissions to avoid duplicate POSTs
   const inFlightOrdersRef = React.useRef<Set<string>>(new Set());
 
-  // Defina fetchWithAuth ANTES de qualquer uso
+  // fetchWithAuth precisa estar definido antes do uso por outras funções
+  const fetchWithAuth = async (input: RequestInfo, init?: RequestInit) => {
+    // helper: verifica se um JWT expirou (com margem)
+    const isTokenExpired = (token?: string | null) => {
+      if (!token) return true;
+      try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return true;
+        const payload = JSON.parse(atob(parts[1]));
+        const exp = typeof payload.exp === 'number' ? payload.exp : 0;
+        // considera expirado com margem de 8s
+        return Date.now() / 1000 > (exp - 8);
+      } catch (e) {
+        return true;
+      }
+    };
+
+    let access = accessToken;
+    // If we don't have an access token in memory, try a refresh first (avoids an initial 401)
+    if (!access) {
+      try {
+        const hasRefreshCookie = (typeof window !== 'undefined' && localStorage.getItem('hasRefresh') === '1') || (typeof document !== 'undefined' && document.cookie && document.cookie.indexOf('refreshToken=') !== -1);
+        if (hasRefreshCookie) {
+          const devToken = typeof window !== 'undefined' ? localStorage.getItem('refreshTokenDev') : null;
+          const refreshRes = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken: devToken }) });
+          if (refreshRes.ok) {/* refresh handled below */}
+        }
+      } catch (e) {
+        // ignore refresh failure here; we'll handle 401 after the request
+      }
+    }
+    const headers = { 'Content-Type': 'application/json', ...(init?.headers as any || {}) } as any;
+
+    // Se o token existir mas estiver expirado, tenta renovar antes da requisição
+    if (access && isTokenExpired(access)) {
+      try {
+        const devToken = typeof window !== 'undefined' ? localStorage.getItem('refreshTokenDev') : null;
+        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken: devToken }) });
+        if (refreshRes.ok) {
+          const d = await refreshRes.json();
+          access = d.accessToken;
+          try { if (d.refreshToken) localStorage.setItem('refreshTokenDev', d.refreshToken); } catch(e) {}
+          setAccessToken(access);
+        } else {
+          // Não conseguiu renovar; limpa e força login
+          setAccessToken(null);
+          setCurrentUser(null);
+          window.location.hash = '#/login/waiter';
+          throw new Error('Sessão expirada. Faça login novamente.');
+        }
+      } catch (e) {
+        setAccessToken(null);
+        setCurrentUser(null);
+        window.location.hash = '#/login/waiter';
+        throw e;
+      }
+    }
+
+    if (access) headers['Authorization'] = `Bearer ${access}`;
+    let res = await fetch(input, { credentials: 'include', ...init, headers });
+
+    if (res.status === 401 || res.status === 403) {
+      // tentativa fallback: se a primeira requisição falhar, tenta renovar e repetir
+      try {
+        const devToken = typeof window !== 'undefined' ? localStorage.getItem('refreshTokenDev') : null;
+        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken: devToken }) });
+        if (refreshRes.ok) {
+          const d = await refreshRes.json();
+          access = d.accessToken;
+          try { if (d.refreshToken) localStorage.setItem('refreshTokenDev', d.refreshToken); } catch(e) {}
+          setAccessToken(access);
+          headers['Authorization'] = `Bearer ${access}`;
+          res = await fetch(input, { credentials: 'include', ...init, headers });
+        } else {
+          setAccessToken(null);
+          setCurrentUser(null);
+          window.location.hash = '#/login/waiter';
+          throw new Error('Sessão expirada. Faça login novamente.');
+        }
+      } catch (e) {
+        setAccessToken(null);
+        setCurrentUser(null);
+        window.location.hash = '#/login/waiter';
+        throw e;
+      }
+    }
+
+    return res;
+  };
 
   // Função para buscar pedidos de uma mesa específica (sem sobrescrever o global)
   const fetchOrdersByTable = useCallback(async (tableId: string) => {
@@ -97,7 +205,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     } catch (e) {}
     return [];
-  }, [accessToken]);
+  }, [accessToken, fetchWithAuth]);
 
   // Load initial data from backend e refresh access token (refresh cookie)
   useEffect(() => {
@@ -177,10 +285,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (localAccess && userDecoded && userDecoded.role === 'admin') {
           const [orderRes, userRes] = await Promise.all([
             fetchWithRetry(`${API_BASE}/orders`).catch(() => []),
-            fetchWithRetry(`${API_BASE}/users`).catch(() => []),
+            fetchWithRetry(`${API_BASE}/users`).catch(() => null),
           ]);
           if (Array.isArray(orderRes)) setOrders(orderRes.map((o: any) => ({ ...o, id: String(o.id), items: (o.items || []).map((it: any) => ({ ...it, id: String(it.id), productId: String(it.productId) })) })));
-          if (Array.isArray(userRes)) setWaiters(userRes.filter((u:any)=>u.role==='waiter').map((u:any)=>({ ...u, id: String(u.id) })));
+          if (Array.isArray(userRes)) {
+            setWaiters(userRes.filter((u:any)=>u.role==='waiter').map((u:any)=>({ ...u, id: String(u.id) })));
+          } else {
+            // fallback in development: try debug endpoint to list users when auth refresh fails
+            try {
+              if (process.env.NODE_ENV !== 'production') {
+                const devUsersRes = await fetch(`${API_BASE}/debug/users`);
+                if (devUsersRes.ok) {
+                  const devUsers = await devUsersRes.json();
+                  setWaiters(devUsers.filter((u:any)=>u.role==='waiter').map((u:any)=>({ ...u, id: String(u.id) })));
+                }
+              }
+            } catch (e) {}
+          }
         } else if (localAccess && userDecoded && userDecoded.role === 'customer') {
           // Para cliente, busca apenas pedidos da mesa (usa deviceTableId em memória)
           if (deviceTableId) {
@@ -196,6 +317,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsInitialized(true);
       }
     })();
+    // Notifications: server-sent events (SSE)
+    try {
+      const es = new EventSource(`${API_BASE}/notifications/stream`);
+      const playBeep = () => {
+        try {
+          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'sine'; o.frequency.value = 880;
+          o.connect(g); g.connect(ctx.destination);
+          o.start(); g.gain.setValueAtTime(0.0001, ctx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.1, ctx.currentTime + 0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
+          setTimeout(() => { o.stop(); ctx.close(); }, 600);
+        } catch (e) {}
+      };
+      es.addEventListener('order_created', (ev: any) => {
+        try {
+          const d = JSON.parse(ev.data);
+          addToast({ title: 'Novo pedido', message: 'Mesa ' + d.tableId, persist: false });
+          if (soundEnabled) playBeep();
+          if (currentUser && (currentUser.role==='admin' || currentUser.role==='waiter')) fetchWithAuth(`${API_BASE}/orders`).then(()=>{});
+          if (deviceTableId && String(deviceTableId)===String(d.tableId)) fetchOrdersByTable(String(d.tableId)).then(()=>{});
+        } catch(e){}
+      });
+      es.addEventListener('order_updated', (ev: any) => {
+        try {
+          const d = JSON.parse(ev.data);
+          addToast({ title: 'Pedido atualizado', message: '#' + d.orderId, persist: false });
+          if (soundEnabled) playBeep();
+          if (currentUser && (currentUser.role==='admin' || currentUser.role==='waiter')) fetchWithAuth(`${API_BASE}/orders`).then(()=>{});
+          if (deviceTableId && String(deviceTableId)===String(d.tableId)) fetchOrdersByTable(String(d.tableId)).then(()=>{});
+        } catch(e){}
+      });
+      es.addEventListener('table_updated', (ev: any) => {
+        try {
+          const d = JSON.parse(ev.data);
+          addToast({ title: 'Mesa atualizada', message: 'Mesa ID ' + d.tableId, persist: false });
+          if (soundEnabled) playBeep();
+          fetchWithAuth(`${API_BASE}/tables`).then(async r => { if (r && r.ok) setTables(await r.json()); });
+        } catch(e){}
+      });
+      es.addEventListener('feedback_created', (ev: any) => {
+        try {
+          const d = JSON.parse(ev.data);
+          addToast({ title: 'Nova avaliação', message: 'Mesa ' + d.tableNumber, persist: false });
+          if (soundEnabled) playBeep();
+          if (currentUser && currentUser.role==='admin') fetchWithAuth(`${API_BASE}/feedbacks`).then(async r=>{ if (r && r.ok) setFeedbacks(await r.json()); });
+        } catch(e){}
+      });
+      es.onerror = () => { es.close(); };
+    } catch (e) {}
   }, []);
 
   // When accessToken or currentUser changes, fetch protected resources for admins
@@ -280,93 +453,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     })();
   }, [establishment, products, categories, tables, orders, waiters, feedbacks, currentUser, deviceTableId, accessToken]);
 
-  const fetchWithAuth = async (input: RequestInfo, init?: RequestInit) => {
-    // helper: verifica se um JWT expirou (com margem)
-    const isTokenExpired = (token?: string | null) => {
-      if (!token) return true;
-      try {
-        const parts = token.split('.');
-        if (parts.length !== 3) return true;
-        const payload = JSON.parse(atob(parts[1]));
-        const exp = typeof payload.exp === 'number' ? payload.exp : 0;
-        // considera expirado com margem de 8s
-        return Date.now() / 1000 > (exp - 8);
-      } catch (e) {
-        return true;
-      }
-    };
-
-    let access = accessToken;
-    // If we don't have an access token in memory, try a refresh first (avoids an initial 401)
-    if (!access) {
-      try {
-        const hasRefreshCookie = (typeof window !== 'undefined' && localStorage.getItem('hasRefresh') === '1') || (typeof document !== 'undefined' && document.cookie && document.cookie.indexOf('refreshToken=') !== -1);
-        if (hasRefreshCookie) {
-          const refreshRes = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST', credentials: 'include' });
-          if (refreshRes.ok) {
-            const d = await refreshRes.json();
-            access = d.accessToken;
-            setAccessToken(access);
-          }
-        }
-      } catch (e) {
-        // ignore refresh failure here; we'll handle 401 after the request
-      }
-    }
-    const headers = { 'Content-Type': 'application/json', ...(init?.headers as any || {}) } as any;
-
-    // Se o token existir mas estiver expirado, tenta renovar antes da requisição
-    if (access && isTokenExpired(access)) {
-      try {
-        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST', credentials: 'include' });
-        if (refreshRes.ok) {
-          const d = await refreshRes.json();
-          access = d.accessToken;
-          setAccessToken(access);
-        } else {
-          // Não conseguiu renovar; limpa e força login
-          setAccessToken(null);
-          setCurrentUser(null);
-          window.location.hash = '#/login/waiter';
-          throw new Error('Sessão expirada. Faça login novamente.');
-        }
-      } catch (e) {
-        setAccessToken(null);
-        setCurrentUser(null);
-        window.location.hash = '#/login/waiter';
-        throw e;
-      }
-    }
-
-    if (access) headers['Authorization'] = `Bearer ${access}`;
-    let res = await fetch(input, { credentials: 'include', ...init, headers });
-
-    if (res.status === 401 || res.status === 403) {
-      // tentativa fallback: se a primeira requisição falhar, tenta renovar e repetir
-      try {
-        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST', credentials: 'include' });
-        if (refreshRes.ok) {
-          const d = await refreshRes.json();
-          access = d.accessToken;
-          setAccessToken(access);
-          headers['Authorization'] = `Bearer ${access}`;
-          res = await fetch(input, { credentials: 'include', ...init, headers });
-        } else {
-          setAccessToken(null);
-          setCurrentUser(null);
-          window.location.hash = '#/login/waiter';
-          throw new Error('Sessão expirada. Faça login novamente.');
-        }
-      } catch (e) {
-        setAccessToken(null);
-        setCurrentUser(null);
-        window.location.hash = '#/login/waiter';
-        throw e;
-      }
-    }
-
-    return res;
-  };
+  
 
   const updateTableStatus = useCallback(async (tableId: string, status: TableStatus, servicePaid?: boolean) => {
     try {
@@ -418,7 +505,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (status === TableStatus.OCCUPIED) {
       setOrders(prev => prev.filter(o => String(o.tableId) !== String(tableId)));
     }
-  }, []);
+  }, [fetchWithAuth]);
 
   const openTable = async (number: number) => {
     try {
@@ -505,7 +592,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // clear in-flight marker
       try { inFlightOrdersRef.current.delete(key); } catch(e){}
     }
-  }, [updateTableStatus]);
+  }, [updateTableStatus, fetchWithAuth]);
 
   const updateOrderStatus = useCallback(async (orderId: string, status: OrderStatus, servicePaid?: boolean) => {
     try {
@@ -519,7 +606,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showInfo('Erro ao atualizar status do pedido. Verifique a conexão com o servidor.');
       return;
     }
-  }, []);
+  }, [fetchWithAuth]);
 
   const updateOrderItemStatus = useCallback(async (orderId: string, itemId: string, status: 'PENDING' | 'DELIVERED') => {
     try {
@@ -539,7 +626,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showInfo('Erro ao atualizar item do pedido. Verifique a conexão com o servidor.');
       return;
     }
-  }, []);
+  }, [fetchWithAuth]);
 
   const addFeedback = async (f: Omit<Feedback, 'id' | 'timestamp'>) => {
     try {
@@ -735,10 +822,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       openTable,
       fetchOrdersByTable,
       saveEstablishment,
-      fetchWithAuth
+      fetchWithAuth,
+      addToast,
+      soundEnabled,
+      setSoundEnabled: setSound
     }}>
       {children}
       <InfoModal open={infoOpen} title="Mensagem" message={infoMessage} onClose={() => { setInfoOpen(false); setInfoMessage(undefined); }} />
+      <Toasts toasts={toasts} onDismiss={dismissToast} />
     </AppContext.Provider>
   );
 };

@@ -12,6 +12,27 @@ export enum TableStatus {
   BILL_REQUESTED = 'BILL_REQUESTED'
 }
 
+// Helpers para tradução dos status para português (apenas para exibição no frontend)
+export const getTableStatusLabel = (status: TableStatus) => {
+  switch (status) {
+    case TableStatus.AVAILABLE: return 'Disponível';
+    case TableStatus.OCCUPIED: return 'Ocupada';
+    case TableStatus.CALLING_WAITER: return 'Chamando Garçom';
+    case TableStatus.BILL_REQUESTED: return 'Conta Solicitada';
+    default: return String(status);
+  }
+};
+
+export const getOrderStatusLabel = (status: OrderStatus) => {
+  switch (status) {
+    case OrderStatus.PENDING: return 'Pendente';
+    case OrderStatus.PARTIAL: return 'Parcial';
+    case OrderStatus.DELIVERED: return 'Entregue';
+    case OrderStatus.PAID: return 'Pago';
+    default: return String(status);
+  }
+};
+
 export interface Product {
   id: string;
   name: string;

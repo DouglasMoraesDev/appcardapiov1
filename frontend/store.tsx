@@ -61,9 +61,18 @@ const INITIAL_THEME: ThemeConfig = {
 
 const API_BASE = (() => {
   const raw = (import.meta.env.VITE_API_URL as string) || '';
-  if (!raw) return '/api';
   const cleaned = raw.replace(/\/$/, '');
-  return cleaned.endsWith('/api') ? cleaned : cleaned + '/api';
+  const envBase = cleaned ? (cleaned.endsWith('/api') ? cleaned : cleaned + '/api') : '/api';
+  try {
+    if (typeof window !== 'undefined') {
+      const host = window.location.hostname;
+      if (host === 'localhost' || host === '127.0.0.1') {
+        // during local development always point to local backend
+        return 'http://localhost:4000/api';
+      }
+    }
+  } catch (e) {}
+  return envBase;
 })();
 
 // DEBUG: show which API base is being used at runtime (remove in production)

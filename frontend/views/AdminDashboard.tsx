@@ -99,12 +99,25 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handleAddWaiter = () => {
-    if (!waiterName.trim() || !waiterPassword.trim()) {
+    const name = waiterName.trim();
+    const password = waiterPassword.trim();
+    if (!name || !password) {
       setInfoMessage('Por favor, informe o nome e a senha do garçom.');
       setInfoOpen(true);
       return;
     }
-    addWaiter(waiterName, waiterPassword);
+    if (password.length < 6) {
+      setInfoMessage('A senha deve ter pelo menos 6 caracteres.');
+      setInfoOpen(true);
+      return;
+    }
+    const username = name.replace(/\s+/g, '').toLowerCase();
+    if (username.length < 3) {
+      setInfoMessage('O nome do garçom é muito curto. Informe um nome com pelo menos 3 caracteres.');
+      setInfoOpen(true);
+      return;
+    }
+    addWaiter(name, password);
     setWaiterName('');
     setWaiterPassword('');
   };

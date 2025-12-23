@@ -60,7 +60,7 @@ const INITIAL_THEME: ThemeConfig = {
 };
 
 const API_BASE = (() => {
-  const raw = (process.env?.VITE_API_URL as string) || '';
+  const raw = (import.meta.env.VITE_API_URL as string) || '';
   if (!raw) return '/api';
   const cleaned = raw.replace(/\/$/, '');
   return cleaned.endsWith('/api') ? cleaned : cleaned + '/api';

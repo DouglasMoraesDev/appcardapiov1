@@ -33,19 +33,27 @@ async function main(){
   });
 
   // Seed establishment
-  const est = await prisma.establishment.upsert({
-    where: { id: 1 },
-    update: {},
-    create: {
-      id: 1,
-      name: 'Playpub Campos do Jordão',
-      logo: 'https://cervejacamposdojordao.com.br/wp-content/uploads/2021/08/logo-playpub.png',
-      address: 'Vila Capivari, Campos do Jordão',
-      serviceCharge: 10,
-      adminUserId: admin.id,
-      themeId: theme.id
-    }
-  });
+  // By default the seed creates an initial establishment for dev convenience.
+  // Set CREATE_ESTABLISHMENT_SEED=false in your environment to skip creating the establishment
+  // so you can register one from the frontend.
+  const shouldCreateEst = (process.env.CREATE_ESTABLISHMENT_SEED || 'true').toLowerCase() !== 'false';
+  if (shouldCreateEst) {
+    const est = await prisma.establishment.upsert({
+      where: { id: 1 },
+      update: {},
+      create: {
+        id: 1,
+        name: 'Playpub Campos do Jordão',
+        logo: 'https://cervejacamposdojordao.com.br/wp-content/uploads/2021/08/logo-playpub.png',
+        address: 'Vila Capivari, Campos do Jordão',
+        serviceCharge: 10,
+        adminUserId: admin.id,
+        themeId: theme.id
+      }
+    });
+  } else {
+    console.log('Skipping establishment seed (CREATE_ESTABLISHMENT_SEED=false)');
+  }
 
   // Seed categories
   const categories = ['Cervejas', 'Pratos', 'Porções', 'Drinks', 'Sobremesas'];

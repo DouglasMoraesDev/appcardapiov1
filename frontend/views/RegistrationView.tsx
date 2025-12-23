@@ -86,26 +86,9 @@ const RegistrationView: React.FC = () => {
   const [navigateOnClose, setNavigateOnClose] = React.useState(false);
   const [navigatePath, setNavigatePath] = React.useState<string>('/');
 
-  React.useEffect(() => {
-    (async () => {
-      try {
-        const rawBase = (import.meta.env.VITE_API_URL as string) || '';
-        const API = rawBase ? (rawBase.replace(/\/$/, '').endsWith('/api') ? rawBase.replace(/\/$/, '') : rawBase.replace(/\/$/, '') + '/api') : '/api';
-        const res = await fetch(`${API}/establishment`);
-        if (res.ok) {
-          const body = await res.json();
-          if (body) {
-            setInfoMessage('Estabelecimento já cadastrado. Faça login para editar.');
-            setInfoOpen(true);
-            setNavigateOnClose(true);
-            setNavigatePath('/login/admin');
-          }
-        }
-      } catch (err) {
-        // ignore network errors here; user can still try to register
-      }
-    })();
-  }, []);
+  // Note: removed automatic check for existing establishment to allow manual registration.
+  // If you want to warn users when an establishment already exists, re-enable a check
+  // or use the environment/seed flags to control behavior.
 
   return (
     <div className="min-h-screen bg-[#06120c] p-4 sm:p-6 flex items-center justify-center py-10">

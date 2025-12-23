@@ -11,6 +11,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
     "hash:passwords": "ts-node ./src/scripts/hashPasswords.ts",
+    "db:clear-establishment": "ts-node ./src/scripts/deleteEstablishment.ts",
     "create:superadmin": "ts-node ./src/scripts/createSuperAdmin.ts"
   },
   "dependencies": {

@@ -66,6 +66,9 @@ const API_BASE = (() => {
   return cleaned.endsWith('/api') ? cleaned : cleaned + '/api';
 })();
 
+// DEBUG: show which API base is being used at runtime (remove in production)
+try { console.info('[app] API_BASE =', API_BASE); } catch (e) {}
+
 const INITIAL_PRODUCTS: Product[] = [];
 
 const INITIAL_CATEGORIES: string[] = [];

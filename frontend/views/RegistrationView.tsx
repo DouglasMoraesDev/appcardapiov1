@@ -98,7 +98,7 @@ const RegistrationView: React.FC = () => {
             setInfoMessage('Estabelecimento já cadastrado. Faça login para editar.');
             setInfoOpen(true);
             setNavigateOnClose(true);
-            setNavigatePath('/login');
+            setNavigatePath('/login/admin');
           }
         }
       } catch (err) {

@@ -98,7 +98,7 @@ const RegistrationView: React.FC = () => {
         </button>
         
         <div className="text-center">
-          <h2 className="text-4xl font-serif text-[#d18a59] uppercase tracking-widest">Novo Restaurante</h2>
+          <h2 className="text-2xl sm:text-4xl font-serif text-[#d18a59] uppercase tracking-widest">Novo Restaurante</h2>
           <p className="mt-2 text-gray-100 opacity-60 uppercase text-[10px] font-bold tracking-[0.2em]">Configure sua plataforma de gestão</p>
         </div>
 

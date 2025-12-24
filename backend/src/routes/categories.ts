@@ -11,8 +11,10 @@ const router = Router();
 router.get('/', async (req, res) => {
   try {
     const where: any = {};
-    if ((req as any).user && (req as any).user.establishmentId) where.establishmentId = Number((req as any).user.establishmentId);
+    const tenantId = (req as any).tenantId ?? null;
+    if (tenantId) where.establishmentId = Number(tenantId);
     else if (req.query.establishmentId) where.establishmentId = Number(req.query.establishmentId as string);
+    else if ((req as any).user && (req as any).user.establishmentId) where.establishmentId = Number((req as any).user.establishmentId);
     const categories = await prisma.category.findMany({ where, include: { products: true } });
     res.json(categories);
   } catch (err) {

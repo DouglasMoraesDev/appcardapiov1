@@ -45,29 +45,39 @@ router.get('/', async (req, res) => {
     } catch {}
   }
 
+  const tenantId = (req as any).tenantId ?? (user ? user.establishmentId : null);
+
   const tableId = req.query.tableId;
   if (tableId) {
     // If a tableId is provided, return orders for that table.
     // By default do NOT include PAID orders to avoid resurfacing old closed consumption.
     // Admins can explicitly request paid orders with ?includePaid=true
     const includePaid = String(req.query.includePaid || '').toLowerCase() === 'true';
-    if (!user) {
-      const orders = await prisma.order.findMany({ where: { tableId: Number(tableId), NOT: { status: 'PAID' } }, include: { items: true } });
-      return res.json(orders);
+    const table = await prisma.table.findUnique({ where: { id: Number(tableId) } });
+    if (!table) return res.json([]);
+
+    // In production require tenantId to be present (prevents anonymous cross-tenant access).
+    if (process.env.NODE_ENV === 'production' && !tenantId) {
+      return res.status(400).json({ error: 'Establishment not specified. Include X-Establishment-Id header or authenticate.' });
     }
-    // Authenticated users may request paid orders explicitly
+
+    // ensure table belongs to tenant if tenant known
+    if (tenantId && table.establishmentId && Number(table.establishmentId) !== Number(tenantId)) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+
     let where: any = includePaid ? { tableId: Number(tableId) } : { tableId: Number(tableId), NOT: { status: 'PAID' } };
-    // restrict to user's establishment if authenticated
-    if (user && (user.role === 'admin' || user.role === 'waiter')) {
-      where = { ...where, establishmentId: Number(user.establishmentId) };
-    }
+    if (table.establishmentId) where.establishmentId = Number(table.establishmentId);
+
     const orders = await prisma.order.findMany({ where, include: { items: true } });
     return res.json(orders);
   }
 
-  // No tableId: only staff may request the full list
+  // No tableId: only staff may request the full list. Restrict by tenant.
   if (user && (user.role === 'admin' || user.role === 'waiter')) {
-    const orders = await prisma.order.findMany({ include: { items: true } });
+    const where: any = {};
+    if (tenantId) where.establishmentId = Number(tenantId);
+    const orders = await prisma.order.findMany({ where, include: { items: true } });
     return res.json(orders);
   }
 

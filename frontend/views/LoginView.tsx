@@ -15,7 +15,8 @@ const LoginView: React.FC = () => {
     e.preventDefault();
     try {
       const rawBase = (import.meta.env.VITE_API_URL as string) || '';
-      const base = rawBase ? rawBase.replace(/\/$/, '') + '/api' : '/api';
+      const cleaned = rawBase.replace(/\/$/, '');
+      const base = cleaned ? (cleaned.endsWith('/api') ? cleaned : cleaned + '/api') : '/api';
       const res = await fetch(`${base}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

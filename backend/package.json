@@ -28,9 +28,7 @@
     "express-rate-limit": "^6.7.0",
     "zod": "*"
   },
-  "prisma": {
-    "seed": "ts-node ./src/seed.ts"
-  },
+  
   "devDependencies": {
     "@types/bcryptjs": "^2.4.2",
     "@types/cookie-parser": "^1.4.3",

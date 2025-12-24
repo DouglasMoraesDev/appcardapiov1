@@ -130,7 +130,34 @@ router.put('/establishments/:id', authenticate, requireSuperAdmin, async (req, r
 router.delete('/establishments/:id', authenticate, requireSuperAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
-    await prisma.establishment.delete({ where: { id } });
+    // Explicitly delete dependent records to avoid orphaned rows
+    const e = await prisma.establishment.findUnique({ where: { id } });
+    if (!e) return res.status(404).json({ error: 'Establishment not found' });
+
+    await prisma.$transaction(async (tx) => {
+      // delete order items for orders of this establishment
+      await tx.orderItem.deleteMany({ where: { order: { establishmentId: id } } }).catch(() => null);
+      // delete orders
+      await tx.order.deleteMany({ where: { establishmentId: id } }).catch(() => null);
+      // delete feedbacks
+      await tx.feedback.deleteMany({ where: { establishmentId: id } }).catch(() => null);
+      // delete products and categories and tables
+      await tx.product.deleteMany({ where: { establishmentId: id } }).catch(() => null);
+      await tx.category.deleteMany({ where: { establishmentId: id } }).catch(() => null);
+      await tx.table.deleteMany({ where: { establishmentId: id } }).catch(() => null);
+      // delete users and their refresh tokens
+      const users = await tx.user.findMany({ where: { establishmentId: id }, select: { id: true } }).catch(() => []);
+      const userIds = users.map(u => u.id);
+      if (userIds.length > 0) {
+        await tx.refreshToken.deleteMany({ where: { userId: { in: userIds } } }).catch(() => null);
+        await tx.user.deleteMany({ where: { id: { in: userIds } } }).catch(() => null);
+      }
+      // delete theme if linked
+      if (e.themeId) await tx.theme.deleteMany({ where: { id: e.themeId } }).catch(() => null);
+      // finally delete establishment
+      await tx.establishment.delete({ where: { id } });
+    });
+
     res.json({ ok: true });
   } catch (err: any) {
     console.error('DELETE /admin/establishments/:id error', err);

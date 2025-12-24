@@ -110,7 +110,7 @@ const TrocaMesaModal: React.FC<{ deviceTableId?: string | null; onLiberar: () =>
             placeholder="Senha do Garçom"
             value={senha}
             onChange={e => setSenha(e.target.value)}
-            className="w-full bg-black/50 border border-white/10 rounded-3xl py-6 text-center text-4xl tracking-[0.5em] text-white outline-none"
+            className="w-full bg-black/50 border border-white/10 rounded-3xl py-4 sm:py-6 text-center text-2xl sm:text-4xl tracking-[0.5em] text-white outline-none"
             autoFocus
             required
           />

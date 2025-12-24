@@ -67,6 +67,17 @@ const SetupDevice = () => {
           <Link to="/register-establishment" className="text-xs text-gray-500 hover:text-[#d18a59] transition-colors flex items-center justify-center gap-2 uppercase font-black tracking-widest">
             <Settings className="w-4 h-4" /> Registrar Novo Estabelecimento
           </Link>
+          {/* Exclusive super-admin link: set VITE_SUPER_ADMIN_ENABLED=1 to show on homepage for owner access */}
+          {(import.meta.env.VITE_SUPER_ADMIN_ENABLED as string) === '1' ? (
+            <div className="mt-2 text-center space-y-2">
+              <div>
+                <Link to="/create-superadmin" className="text-[11px] text-amber-400 underline">Acesso Super Admin (criar)</Link>
+              </div>
+              <div>
+                <Link to="/login/superadmin" className="text-[11px] text-amber-400 underline">Login Super Admin (dono)</Link>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

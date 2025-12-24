@@ -26,7 +26,7 @@ const MesaAberturaView: React.FC<{ onMesaAberta: (tableId: string) => void }> = 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#06120c] p-4 sm:p-6">
       <div className="max-w-md sm:max-w-sm w-full space-y-8 bg-[#0d1f15] p-6 sm:p-10 rounded-[3rem] border border-white/5 shadow-2xl">
-        <h2 className="text-4xl font-serif text-[#d18a59] uppercase tracking-widest text-center">Abrir Mesa</h2>
+        <h2 className="text-3xl sm:text-4xl font-serif text-[#d18a59] uppercase tracking-widest text-center">Abrir Mesa</h2>
         <form onSubmit={handleAbrirMesa} className="space-y-6">
           <input
             type="number"

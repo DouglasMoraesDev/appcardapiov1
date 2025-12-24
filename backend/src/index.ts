@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import logger from './logger';
+import { resolveTenant } from './middleware/multiTenant';
 import productsRouter from './routes/products';
 import categoriesRouter from './routes/categories';
 import usersRouter from './routes/users';
@@ -66,6 +67,8 @@ if (FRONTEND_ORIGIN) {
 }
 app.use(express.json());
 app.use(cookieParser());
+// Resolve tenant early for all requests (header/query/domain/user)
+app.use(resolveTenant);
 
 app.use('/api/products', productsRouter);
 app.use('/api/categories', categoriesRouter);
@@ -99,7 +102,7 @@ try {
 	console.warn('Frontend static assets not found, skipping static serve');
 }
 
-app.listen(port, () => console.log(`Server running on port ${port}`));
+app.listen(port, '0.0.0.0', () => console.log(`Server running on port ${port}`));
 // Generic error handler
 app.use((err: any, req: any, res: any, next: any) => {
 	logger.error(err);

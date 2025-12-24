@@ -8,8 +8,17 @@ const router = Router();
 
 router.get('/', async (req, res) => {
   try {
-    const e = await prisma.establishment.findFirst({ include: { theme: true, adminUser: true } });
-    return res.json(e);
+    const tenantId = (req as any).tenantId ?? null;
+    if (tenantId) {
+      const e = await prisma.establishment.findUnique({ where: { id: Number(tenantId) }, include: { theme: true, adminUser: true } });
+      return res.json(e);
+    }
+    // fallback: in non-production allow first establishment for local dev convenience
+    if (process.env.NODE_ENV !== 'production') {
+      const e = await prisma.establishment.findFirst({ include: { theme: true, adminUser: true } });
+      return res.json(e);
+    }
+    return res.status(400).json({ error: 'Establishment not specified. Include X-Establishment-Id header or deploy per-tenant.' });
   } catch (err) {
     console.error('GET /establishment error', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -33,6 +42,8 @@ router.put('/:id', authenticate, authorize(['admin']), async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+    const tenantId = (req as any).tenantId ?? null;
+    if (tenantId && Number(tenantId) !== id) return res.status(403).json({ error: 'Cannot update establishment outside your tenant' });
     const data = req.body;
     const updated = await prisma.establishment.update({ where: { id }, data });
     return res.json(updated);
@@ -60,7 +71,7 @@ router.put('/', async (req, res) => {
 
     let e = await prisma.establishment.findFirst();
 
-    // If an establishment exists, require admin auth
+    // If an establishment exists, require admin auth and ensure tenant matches (if tenant provided)
     if (e) {
       const auth = req.headers.authorization;
       if (!auth) return res.status(401).json({ error: 'Not authenticated' });
@@ -75,6 +86,10 @@ router.put('/', async (req, res) => {
       } catch (err) {
         return res.status(401).json({ error: 'Token invalid' });
       }
+
+      // ensure tenant match if a tenant was resolved
+      const tenantId = (req as any).tenantId ?? null;
+      if (tenantId && Number(tenantId) !== e.id) return res.status(403).json({ error: 'Cannot modify this establishment' });
 
       // update establishment fields (without theme)
       const updated = await prisma.establishment.update({ where: { id: e.id }, data: payload });
@@ -112,6 +127,12 @@ router.put('/', async (req, res) => {
     }
     createPayload.themeId = themeId;
     const created = await prisma.establishment.create({ data: { ...createPayload } });
+    // If we created an admin user above, ensure the user's establishmentId points to this establishment
+    try {
+      if (createPayload.adminUserId) {
+        await prisma.user.update({ where: { id: createPayload.adminUserId }, data: { establishmentId: created.id } }).catch(() => null);
+      }
+    } catch (e) {}
     return res.json(created);
   } catch (err) {
     console.error('PUT /establishment (convenience) error', err);

@@ -151,7 +151,7 @@ const AdminDashboard: React.FC = () => {
     <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-4xl font-serif text-white uppercase">Painel de Gestão</h2>
+          <h2 className="text-2xl md:text-4xl font-serif text-white uppercase">Painel de Gestão</h2>
           <p className="text-[#d18a59] text-[10px] uppercase font-bold tracking-[0.2em] mt-1">Sessão Administrativa • {establishment.name}</p>
         </div>
         <div className="flex bg-[#0d1f15] p-1 rounded-2xl border border-white/5 overflow-x-auto no-scrollbar max-w-full">

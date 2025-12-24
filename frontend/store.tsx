@@ -145,7 +145,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const hasRefreshCookie = (typeof window !== 'undefined' && localStorage.getItem('hasRefresh') === '1') || (typeof document !== 'undefined' && document.cookie && document.cookie.indexOf('refreshToken=') !== -1);
         if (hasRefreshCookie) {
-          const devToken = typeof window !== 'undefined' ? localStorage.getItem('refreshTokenDev') : null;
+          const devToken = (typeof window !== 'undefined' && import.meta.env.DEV) ? localStorage.getItem('refreshTokenDev') : null;
           const refreshRes = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken: devToken }) });
           if (refreshRes.ok) {/* refresh handled below */}
         }
@@ -158,7 +158,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Se o token existir mas estiver expirado, tenta renovar antes da requisição
     if (access && isTokenExpired(access)) {
       try {
-        const devToken = typeof window !== 'undefined' ? localStorage.getItem('refreshTokenDev') : null;
+        const devToken = (typeof window !== 'undefined' && import.meta.env.DEV) ? localStorage.getItem('refreshTokenDev') : null;
         const refreshRes = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken: devToken }) });
         if (refreshRes.ok) {
           const d = await refreshRes.json();
@@ -181,12 +181,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     if (access) headers['Authorization'] = `Bearer ${access}`;
+    // include tenant header when available (explicit env or resolved establishment)
+    try {
+      const envTenant = (import.meta.env.VITE_ESTABLISHMENT_ID as string | undefined) || undefined;
+      const tenantHeader = envTenant || ((establishment as any)?.id ? String((establishment as any).id) : undefined);
+      if (tenantHeader) headers['X-Establishment-Id'] = String(tenantHeader);
+    } catch (e) {}
     let res = await fetch(input, { credentials: 'include', ...init, headers });
 
     if (res.status === 401 || res.status === 403) {
       // tentativa fallback: se a primeira requisição falhar, tenta renovar e repetir
       try {
-        const devToken = typeof window !== 'undefined' ? localStorage.getItem('refreshTokenDev') : null;
+        const devToken = (typeof window !== 'undefined' && import.meta.env.DEV) ? localStorage.getItem('refreshTokenDev') : null;
         const refreshRes = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken: devToken }) });
         if (refreshRes.ok) {
           const d = await refreshRes.json();

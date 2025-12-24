@@ -27,10 +27,12 @@ const feedbackSchema = z.object({ tableNumber: z.number(), rating: z.number().mi
 router.post('/', setEstablishmentOnCreate, validateBody(feedbackSchema), async (req, res) => {
   const { tableNumber, rating, comment } = req.body;
   // prefer establishmentId set by middleware (authenticated users)
-  let estId = (req as any).body?.establishmentId;
+  let estId = (req as any).body?.establishmentId ?? (req as any).tenantId ?? null;
   if (!estId) {
-    // try to find table by number and use its establishment
-    const table = await prisma.table.findFirst({ where: { number: Number(tableNumber) } });
+    // try to find table by number and use its establishment (scoped to tenant when possible)
+    const tableWhere: any = { number: Number(tableNumber) };
+    if ((req as any).tenantId) tableWhere.establishmentId = Number((req as any).tenantId);
+    const table = await prisma.table.findFirst({ where: tableWhere });
     estId = table?.establishmentId ?? null;
   }
   const f = await prisma.feedback.create({ data: { tableNumber: Number(tableNumber), rating: Number(rating), comment, establishmentId: estId } });

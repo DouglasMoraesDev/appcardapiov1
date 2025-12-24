@@ -11,7 +11,7 @@ const ProductCard: React.FC<{ product: Product; theme: any; addToCart: (p:any)=>
   const showToggle = desc.length > 180;
   return (
     <div onClick={() => openProductModal(product)} style={{ backgroundColor: `${theme.card}80`, borderColor: 'rgba(255,255,255,0.05)' }} className={`rounded-[2rem] overflow-hidden flex gap-5 border p-0 group active:bg-white/5 transition-all cursor-pointer ${expanded ? 'shadow-2xl' : ''}`}>
-      <div className="shrink-0 relative w-40 h-40 overflow-hidden rounded-[1rem]">
+      <div className="shrink-0 relative w-24 h-24 md:w-40 md:h-40 overflow-hidden rounded-[1rem]">
         <div className={`absolute inset-0 bg-cover bg-center transition-transform duration-300`} style={{ backgroundImage: `url(${product.image})`, transform: expanded ? 'scale(1.15)' : 'scale(1)' }}></div>
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
         <div className="absolute left-3 bottom-3">
@@ -27,7 +27,7 @@ const ProductCard: React.FC<{ product: Product; theme: any; addToCart: (p:any)=>
             {product.isHighlight && <Star style={{ color: theme.primary }} className="w-3 h-3 fill-current" />}
           </div>
           <>
-            <p style={{ color: theme.text }} className={`text-[10px] opacity-70 leading-relaxed whitespace-pre-wrap break-words ${expanded ? '' : 'max-h-[4.5rem] overflow-hidden'}`}>{desc}</p>
+            <p style={{ color: theme.text }} className={`text-[10px] md:text-[12px] opacity-70 leading-relaxed whitespace-pre-wrap break-words ${expanded ? '' : 'max-h-[4.5rem] overflow-hidden'}`}>{desc}</p>
             {showToggle && (
               <button onClick={(e) => { e.stopPropagation(); onToggle(product.id); }} className="text-[11px] font-bold text-[#d18a59] mt-2">{expanded ? 'Ler menos' : 'Ler mais'}</button>
             )}
@@ -238,7 +238,7 @@ const CustomerView: React.FC = () => {
         <div style={{ background: `linear-gradient(to top, ${theme.background}, transparent)` }} className="absolute inset-0 flex flex-col justify-end p-8">
           <div className="flex justify-between items-end">
             <div className="space-y-1">
-              <h1 className="text-5xl font-serif text-white uppercase tracking-tighter">{establishment.name.split(' ')[0]}</h1>
+              <h1 className="text-3xl md:text-5xl font-serif text-white uppercase tracking-tighter">{establishment.name.split(' ')[0]}</h1>
               <div className="flex items-center gap-3">
                  <span style={{ backgroundColor: theme.primary }} className="h-0.5 w-6"></span>
                  <p style={{ color: theme.primary }} className="font-bold tracking-[0.4em] text-[10px] uppercase">Mesa {currentTable?.number}</p>
@@ -259,15 +259,15 @@ const CustomerView: React.FC = () => {
              <Sparkles style={{ color: theme.primary }} className="w-4 h-4" />
              <h3 style={{ color: theme.text }} className="text-[10px] uppercase font-bold tracking-[0.3em] opacity-80">Seleção do Chef</h3>
            </div>
-           <div className="flex gap-6 overflow-x-auto px-8 no-scrollbar snap-x">
+               <div className="flex gap-6 overflow-x-auto px-8 no-scrollbar snap-x">
              {highlights.map(item => (
                <div 
                  key={item.id} 
                  onClick={() => openProductModal(item)}
                  style={{ backgroundColor: theme.card, borderColor: 'rgba(255,255,255,0.05)' }}
-                 className="snap-start min-w-[260px] rounded-[2.5rem] overflow-hidden border relative active:scale-95 transition-all shadow-2xl group cursor-pointer"
+                   className="snap-start min-w-[200px] sm:min-w-[260px] rounded-[2.5rem] overflow-hidden border relative active:scale-95 transition-all shadow-2xl group cursor-pointer"
                >
-                 <div className="h-32 w-full bg-cover bg-center group-hover:scale-110 transition-transform duration-700" style={{ backgroundImage: `url(${item.image})` }}></div>
+                 <div className="h-24 sm:h-32 w-full bg-cover bg-center group-hover:scale-110 transition-transform duration-700" style={{ backgroundImage: `url(${item.image})` }}></div>
                  <div className="p-6 space-y-2">
                    <h4 className="font-bold text-base text-white truncate">{item.name}</h4>
                    <p style={{ color: theme.primary }} className="font-serif font-bold text-xl leading-none">R$ {item.price.toFixed(2)}</p>
@@ -415,7 +415,7 @@ const CustomerView: React.FC = () => {
               <div className="space-y-8 pt-6">
                 <div className="flex justify-between items-end">
                   <span className="text-white font-bold uppercase text-[10px] tracking-widest mb-1 opacity-70">Subtotal</span>
-                  <span style={{ color: theme.primary }} className="text-5xl font-serif font-bold">R$ {cartTotal.toFixed(2)}</span>
+                  <span style={{ color: theme.primary }} className="text-2xl md:text-5xl font-serif font-bold">R$ {cartTotal.toFixed(2)}</span>
                 </div>
                 <button 
                   onClick={handlePlaceOrder}
@@ -474,7 +474,7 @@ const CustomerView: React.FC = () => {
             <div className="space-y-8">
               <div className="flex justify-between items-end">
                 <span className="text-white font-bold uppercase text-[10px] tracking-widest mb-1 opacity-70">Total a Pagar</span>
-                <span style={{ color: theme.primary }} className="text-5xl font-serif font-bold">R$ {grandTotal.toFixed(2)}</span>
+                <span style={{ color: theme.primary }} className="text-2xl md:text-5xl font-serif font-bold">R$ {grandTotal.toFixed(2)}</span>
               </div>
               <button 
                 onClick={handleRequestFinalBill}

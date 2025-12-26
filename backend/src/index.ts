@@ -27,7 +27,7 @@ const app = express();
 if (process.env.NODE_ENV === 'production') {
 	app.set('trust proxy', 1);
 }
-const port = process.env.PORT || 4000;
+const port = Number(process.env.PORT || 4000);
 
 // In production, require a non-default JWT secret to be set
 if (process.env.NODE_ENV === 'production') {

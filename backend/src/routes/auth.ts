@@ -3,7 +3,6 @@ import { Router } from 'express';
 import prisma from '../prisma';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
 import { authLimiter } from '../middleware/rateLimiter';
 import { z } from 'zod';
 import { validateBody } from '../middleware/validate';
@@ -13,9 +12,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
 const ACCESS_EXPIRES = '15m';
 const REFRESH_EXPIRES_DAYS = 7;
 
-function makeRefreshToken(){
-  return crypto.randomBytes(48).toString('hex');
-}
+
 
 // Registro de novo usuário
 const registerSchema = z.object({ username: z.string(), password: z.string().min(6), name: z.string(), role: z.string() });
@@ -49,65 +46,16 @@ router.post('/login', authLimiter, async (req, res) => {
   // role enforcement
   if (role && user.role !== role) return res.status(403).json({ error: 'Invalid role' });
 
-  const accessToken = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: ACCESS_EXPIRES });
-
-  // create refresh token record and set as httpOnly cookie
-  const refreshToken = makeRefreshToken();
-  const expiresAt = new Date(Date.now() + REFRESH_EXPIRES_DAYS * 24 * 60 * 60 * 1000);
-  await prisma.refreshToken.create({ data: { token: refreshToken, userId: user.id, expiresAt } });
-  // clear any previous cookie set on different paths to evitar duplicatas
-  res.clearCookie('refreshToken', { path: '/' });
-  res.clearCookie('refreshToken', { path: '/api/auth' });
-  res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', expires: expiresAt });
-
-  // In development, also return the refresh token in the body to help dev clients (not for production)
+  // issue access token only (no refresh tokens)
+  const accessToken = jwt.sign({ userId: user.id, role: user.role, name: user.name }, JWT_SECRET, { expiresIn: '3h' });
   const body: any = { accessToken, user: { id: user.id, name: user.name, role: user.role } };
-  if (process.env.NODE_ENV !== 'production') body.refreshToken = refreshToken;
   res.json(body);
 });
 
-router.post('/refresh', authLimiter, async (req, res) => {
-  // Accept refresh token from cookie, request body or header to help dev workflows
-  const token = req.cookies?.refreshToken || req.body?.refreshToken || req.headers['x-refresh-token'] as string | undefined || req.query?.token as string | undefined;
-  try {
-    console.debug('[auth/refresh] incoming token present?', !!token, 'cookie?', !!req.cookies?.refreshToken, 'body?', !!req.body?.refreshToken, 'header?', !!req.headers['x-refresh-token']);
-  } catch(e){}
-  if (!token) return res.status(401).json({ error: 'No refresh token' });
-  const db = await prisma.refreshToken.findUnique({ where: { token } });
-  try { console.debug('[auth/refresh] db token found?', !!db); } catch(e){}
-  if (!db) return res.status(401).json({ error: 'Invalid refresh token' });
-  if (db.expiresAt < new Date()) {
-    await prisma.refreshToken.delete({ where: { id: db.id } });
-    return res.status(401).json({ error: 'Refresh token expired' });
-  }
-  const user = await prisma.user.findUnique({ where: { id: db.userId } });
-  if (!user) return res.status(401).json({ error: 'User not found' });
-
-  const accessToken = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: ACCESS_EXPIRES });
-
-  // Optionally rotate refresh token
-  const newRefresh = makeRefreshToken();
-  const newExpires = new Date(Date.now() + REFRESH_EXPIRES_DAYS * 24 * 60 * 60 * 1000);
-  await prisma.refreshToken.create({ data: { token: newRefresh, userId: user.id, expiresAt: newExpires } });
-  // use deleteMany to avoid throwing if token was already removed concurrently
-  await prisma.refreshToken.deleteMany({ where: { id: db.id } });
-  res.clearCookie('refreshToken', { path: '/' });
-  res.clearCookie('refreshToken', { path: '/api/auth' });
-  res.cookie('refreshToken', newRefresh, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', expires: newExpires });
-
-  const bodyOut: any = { accessToken, user: { id: user.id, name: user.name, role: user.role } };
-  if (process.env.NODE_ENV !== 'production') bodyOut.refreshToken = newRefresh;
-  res.json(bodyOut);
-});
+// /refresh removed: stateless JWT workflow
 
 router.post('/logout', async (req, res) => {
-  const token = req.cookies?.refreshToken;
-  if (token) {
-    await prisma.refreshToken.deleteMany({ where: { token } }).catch(()=>{});
-  }
-  // clear both possible cookie paths
-  res.clearCookie('refreshToken', { path: '/' });
-  res.clearCookie('refreshToken', { path: '/api/auth' });
+  // stateless logout — client must remove stored token
   res.json({ ok: true });
 });
 

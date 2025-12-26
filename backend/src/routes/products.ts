@@ -40,11 +40,13 @@ router.post('/', authenticate, authorize(['admin']), setEstablishmentOnCreate, g
     let resolvedCategoryId: number | null = categoryId ?? null;
     if (!resolvedCategoryId && category && typeof category === 'string') {
       // find or create category by name
-      let cat = await prisma.category.findFirst({ where: { name: category } });
-      if (!cat) cat = await prisma.category.create({ data: { name: category } });
+      const establishmentId = req.body?.establishmentId ?? (req as any).user?.establishmentId ?? null;
+      let cat = await prisma.category.findFirst({ where: { name: category, establishmentId } });
+      if (!cat) cat = await prisma.category.create({ data: { name: category, establishmentId } });
       resolvedCategoryId = cat.id;
     }
-    const product = await prisma.product.create({ data: { name, description, price: Number(price || 0), image, categoryId: resolvedCategoryId, isHighlight: !!isHighlight }, include: { category: true } });
+    const establishmentId = req.body?.establishmentId ?? (req as any).user?.establishmentId ?? null;
+    const product = await prisma.product.create({ data: { name, description, price: Number(price || 0), image, categoryId: resolvedCategoryId, isHighlight: !!isHighlight, establishmentId }, include: { category: true } });
     return res.json(product);
   } catch (err) {
     console.error('POST /products error', err);
@@ -69,8 +71,9 @@ router.put('/:id', authenticate, authorize(['admin']), ensureResourceBelongsToUs
     const incoming = { ...(req.body || {}) } as any;
     // support category name in update payload
     if (incoming.category && typeof incoming.category === 'string') {
-      let cat = await prisma.category.findFirst({ where: { name: incoming.category } });
-      if (!cat) cat = await prisma.category.create({ data: { name: incoming.category } });
+      const establishmentId = req.body?.establishmentId ?? (req as any).user?.establishmentId ?? null;
+      let cat = await prisma.category.findFirst({ where: { name: incoming.category, establishmentId } });
+      if (!cat) cat = await prisma.category.create({ data: { name: incoming.category, establishmentId } });
       incoming.categoryId = cat.id;
       delete incoming.category;
     }

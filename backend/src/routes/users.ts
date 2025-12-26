@@ -29,7 +29,8 @@ router.post('/', authenticate, authorize(['admin']), setEstablishmentOnCreate, g
   const { name, username, password, role, pin } = req.body;
   const hashed = password ? await bcrypt.hash(password, 8) : undefined;
   try {
-    const user = await prisma.user.create({ data: { name, username, password: hashed, role, pin } });
+    const establishmentId = req.body?.establishmentId ?? (req as any).user?.establishmentId ?? null;
+    const user = await prisma.user.create({ data: { name, username, password: hashed, role, pin, establishmentId } });
     res.json(user);
   } catch (error: any) {
     // handle unique username

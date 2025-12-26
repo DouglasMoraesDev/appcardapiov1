@@ -139,46 +139,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
-    let access = accessToken;
-    // If we don't have an access token in memory, try a refresh first (avoids an initial 401)
-    if (!access) {
-      try {
-        const hasRefreshCookie = (typeof window !== 'undefined' && localStorage.getItem('hasRefresh') === '1') || (typeof document !== 'undefined' && document.cookie && document.cookie.indexOf('refreshToken=') !== -1);
-        if (hasRefreshCookie) {
-          const devToken = (typeof window !== 'undefined' && import.meta.env.DEV) ? localStorage.getItem('refreshTokenDev') : null;
-          const refreshRes = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken: devToken }) });
-          if (refreshRes.ok) {/* refresh handled below */}
-        }
-      } catch (e) {
-        // ignore refresh failure here; we'll handle 401 after the request
-      }
-    }
-    const headers = { 'Content-Type': 'application/json', ...(init?.headers as any || {}) } as any;
-
-    // Se o token existir mas estiver expirado, tenta renovar antes da requisição
+    let access = accessToken || (() => { try { return localStorage.getItem('accessToken'); } catch(e){ return null; } })();
+    // if token expired, clear and force login
     if (access && isTokenExpired(access)) {
-      try {
-        const devToken = (typeof window !== 'undefined' && import.meta.env.DEV) ? localStorage.getItem('refreshTokenDev') : null;
-        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken: devToken }) });
-        if (refreshRes.ok) {
-          const d = await refreshRes.json();
-          access = d.accessToken;
-          try { if (d.refreshToken) localStorage.setItem('refreshTokenDev', d.refreshToken); } catch(e) {}
-          setAccessToken(access);
-        } else {
-          // Não conseguiu renovar; limpa e força login
-          setAccessToken(null);
-          setCurrentUser(null);
-          window.location.hash = '#/login/waiter';
-          throw new Error('Sessão expirada. Faça login novamente.');
-        }
-      } catch (e) {
-        setAccessToken(null);
-        setCurrentUser(null);
-        window.location.hash = '#/login/waiter';
-        throw e;
-      }
+      try { localStorage.removeItem('accessToken'); } catch(e){}
+      setAccessToken(null);
+      setCurrentUser(null);
+      window.location.hash = '#/login/waiter';
+      throw new Error('Sessão expirada. Faça login novamente.');
     }
+
+    const headers = { 'Content-Type': 'application/json', ...(init?.headers as any || {}) } as any;
 
     if (access) headers['Authorization'] = `Bearer ${access}`;
     // include tenant header when available (explicit env or resolved establishment)
@@ -187,31 +158,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const tenantHeader = envTenant || ((establishment as any)?.id ? String((establishment as any).id) : undefined);
       if (tenantHeader) headers['X-Establishment-Id'] = String(tenantHeader);
     } catch (e) {}
-    let res = await fetch(input, { credentials: 'include', ...init, headers });
+    let res: Response;
+    try {
+      res = await fetch(input, { credentials: 'include', ...init, headers });
+    } catch (err) {
+      addToast({ title: 'Erro', message: 'Erro ao conectar com o servidor.' });
+      throw err;
+    }
 
-    if (res.status === 401 || res.status === 403) {
-      // tentativa fallback: se a primeira requisição falhar, tenta renovar e repetir
+    if (res.status === 401) {
+      // unauthorized — clear token and force login
+      try { localStorage.removeItem('accessToken'); } catch(e){}
+      setAccessToken(null);
+      setCurrentUser(null);
+      window.location.hash = '#/login/waiter';
+      throw new Error('Sessão expirada. Faça login novamente.');
+    }
+    if (res.status === 403) {
+      // forbidden — don't clear session automatically. Surface server message if available.
+      let bodyText = null;
+      try { bodyText = await res.text(); } catch (e) { bodyText = null; }
       try {
-        const devToken = (typeof window !== 'undefined' && import.meta.env.DEV) ? localStorage.getItem('refreshTokenDev') : null;
-        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refreshToken: devToken }) });
-        if (refreshRes.ok) {
-          const d = await refreshRes.json();
-          access = d.accessToken;
-          try { if (d.refreshToken) localStorage.setItem('refreshTokenDev', d.refreshToken); } catch(e) {}
-          setAccessToken(access);
-          headers['Authorization'] = `Bearer ${access}`;
-          res = await fetch(input, { credentials: 'include', ...init, headers });
-        } else {
-          setAccessToken(null);
-          setCurrentUser(null);
-          window.location.hash = '#/login/waiter';
-          throw new Error('Sessão expirada. Faça login novamente.');
-        }
-      } catch (e) {
-        setAccessToken(null);
-        setCurrentUser(null);
-        window.location.hash = '#/login/waiter';
-        throw e;
+        const parsed = bodyText ? JSON.parse(bodyText) : null;
+        const msg = parsed?.error || parsed?.message || bodyText || 'Acesso negado';
+        throw new Error(String(msg));
+      } catch (e: any) {
+        throw new Error(String((e && e.message) || 'Acesso negado'));
       }
     }
 
@@ -230,168 +202,123 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return [];
   }, [accessToken, fetchWithAuth]);
 
-  // Load initial data from backend e refresh access token (refresh cookie)
+  // Load initial data from backend and restore access token from localStorage
   useEffect(() => {
     (async () => {
       try {
         let localAccess: string | null = null;
         let userDecoded: any = null;
-        // Only attempt refresh if a refresh cookie is likely present (avoid unnecessary 401s)
-        // httpOnly refresh cookies are not visible to JS, so also check a localStorage flag set at login
-        const hasRefreshCookie = (typeof window !== 'undefined' && localStorage.getItem('hasRefresh') === '1') || (typeof document !== 'undefined' && document.cookie && document.cookie.indexOf('refreshToken=') !== -1);
-        let d: any = null;
-        if (hasRefreshCookie) {
-          const r = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST', credentials: 'include' });
-          if (r.ok) {
-            d = await r.json();
-            localAccess = d.accessToken;
-            userDecoded = d.user;
-            setAccessToken(localAccess);
-            setCurrentUser({ id: String(d.user.id), name: d.user.name, role: d.user.role } as any);
-          } else {
-            // Se não autenticado, limpa usuário e token
-            setAccessToken(null);
-            setCurrentUser(null);
-            localAccess = null;
-            userDecoded = null;
-          }
+        try { localAccess = localStorage.getItem('accessToken'); } catch(e) { localAccess = null; }
+        const isTokenExpired = (token?: string | null) => {
+          if (!token) return true;
+          try { const parts = token.split('.'); if (parts.length !== 3) return true; const payload = JSON.parse(atob(parts[1])); const exp = typeof payload.exp === 'number' ? payload.exp : 0; return Date.now() / 1000 > (exp - 8); } catch(e) { return true; }
+        };
+        if (localAccess && !isTokenExpired(localAccess)) {
+          setAccessToken(localAccess);
+          try { const payload = JSON.parse(atob(localAccess.split('.')[1])); userDecoded = payload; setCurrentUser({ id: String(payload.userId || payload.sub || ''), name: payload.name || '', role: payload.role || '' } as any); } catch(e){}
         } else {
-          // no refresh cookie -> treat as unauthenticated without calling the server
+          try { localStorage.removeItem('accessToken'); } catch(e){}
           setAccessToken(null);
           setCurrentUser(null);
           localAccess = null;
-          userDecoded = null;
         }
 
         const headers: any = { 'Content-Type': 'application/json' };
         if (localAccess) headers['Authorization'] = `Bearer ${localAccess}`;
 
-        const fetchWithRetry = async (url: string) => {
-          let res = await fetch(url, { headers });
-          if (res.status === 401 || res.status === 403) {
-            // tenta renovar token usando cookie de refresh
-            const refreshRes = await fetch(`${API_BASE}/auth/refresh`, { method: 'POST', credentials: 'include' });
-            if (refreshRes.ok) {
-              const d2 = await refreshRes.json();
-              localAccess = d2.accessToken;
-              userDecoded = d2.user;
-              setAccessToken(localAccess);
-              headers['Authorization'] = `Bearer ${localAccess}`;
-              res = await fetch(url, { headers });
-            } else {
-              // Se não conseguir renovar, limpa usuário e token e encerra
-              setAccessToken(null);
-              setCurrentUser(null);
-              return null;
-            }
-          }
-          return res.ok ? await res.json() : null;
+        const fetchJson = async (url: string) => {
+          try {
+            const r = await fetch(url, { headers });
+            return r.ok ? await r.json() : null;
+          } catch (e) { return null; }
         };
 
-        // Carrega dados públicos sempre, protegidos só se autenticado
         const [estRes, prodRes, catRes, tableRes, fbRes] = await Promise.all([
-          fetchWithRetry(`${API_BASE}/establishment`).catch(() => null),
-          fetchWithRetry(`${API_BASE}/products`).catch(() => []),
-          fetchWithRetry(`${API_BASE}/categories`).catch(() => []),
-          fetchWithRetry(`${API_BASE}/tables`).catch(() => []),
-          fetchWithRetry(`${API_BASE}/feedbacks`).catch(() => [])
+          fetchJson(`${API_BASE}/establishment`),
+          fetchJson(`${API_BASE}/products`),
+          fetchJson(`${API_BASE}/categories`),
+          fetchJson(`${API_BASE}/tables`),
+          fetchJson(`${API_BASE}/feedbacks`),
         ]);
-        if (estRes) {
-          setEstablishment({ ...estRes, theme: { ...INITIAL_THEME, ...(estRes.theme || {}) } });
-        }
+        if (estRes) setEstablishment({ ...estRes, theme: { ...INITIAL_THEME, ...(estRes.theme || {}) } });
         if (Array.isArray(prodRes)) setProducts(prodRes.map((p: any) => ({ ...p, id: String(p.id), category: (typeof p.category === 'string' ? p.category : (p.category?.name || 'Geral')) } as any)));
         if (Array.isArray(catRes)) setCategories(catRes.map((c: any) => c.name));
         if (Array.isArray(tableRes)) setTables(tableRes.map((t: any) => ({ ...t, id: String(t.id) })));
         if (Array.isArray(fbRes)) setFeedbacks(fbRes.map((f: any) => ({ ...f, id: String(f.id) })));
 
-        // Só busca dados protegidos se autenticado
+        // protected resources
         if (localAccess && userDecoded && userDecoded.role === 'admin') {
           const [orderRes, userRes] = await Promise.all([
-            fetchWithRetry(`${API_BASE}/orders`).catch(() => []),
-            fetchWithRetry(`${API_BASE}/users`).catch(() => null),
+            fetchJson(`${API_BASE}/orders`),
+            fetchJson(`${API_BASE}/users`)
           ]);
           if (Array.isArray(orderRes)) setOrders(orderRes.map((o: any) => ({ ...o, id: String(o.id), items: (o.items || []).map((it: any) => ({ ...it, id: String(it.id), productId: String(it.productId) })) })));
-          if (Array.isArray(userRes)) {
-            setWaiters(userRes.filter((u:any)=>u.role==='waiter').map((u:any)=>({ ...u, id: String(u.id) })));
-          } else {
-            // fallback in development: try debug endpoint to list users when auth refresh fails
-            try {
-              if (process.env.NODE_ENV !== 'production') {
-                const devUsersRes = await fetch(`${API_BASE}/debug/users`);
-                if (devUsersRes.ok) {
-                  const devUsers = await devUsersRes.json();
-                  setWaiters(devUsers.filter((u:any)=>u.role==='waiter').map((u:any)=>({ ...u, id: String(u.id) })));
-                }
-              }
-            } catch (e) {}
-          }
-        } else if (localAccess && userDecoded && userDecoded.role === 'customer') {
-          // Para cliente, busca apenas pedidos da mesa (usa deviceTableId em memória)
-          if (deviceTableId) {
-            const orderRes = await fetchWithRetry(`${API_BASE}/orders?tableId=${deviceTableId}`).catch(() => []);
-            if (Array.isArray(orderRes)) setOrders(orderRes.map((o: any) => ({ ...o, id: String(o.id), items: (o.items || []).map((it: any) => ({ ...it, id: String(it.id), productId: String(it.productId) })) })));
-          }
+          if (Array.isArray(userRes)) setWaiters(userRes.filter((u:any)=>u.role==='waiter').map((u:any)=>({ ...u, id: String(u.id) })));
         }
       } catch (err) {
-        // Falha ao carregar API remota durante init — limpa usuário e token
         setAccessToken(null);
         setCurrentUser(null);
       } finally {
         setIsInitialized(true);
       }
     })();
-    // Notifications: server-sent events (SSE)
-    try {
-      const es = new EventSource(`${API_BASE}/notifications/stream`);
-      const playBeep = () => {
-        try {
-          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-          const o = ctx.createOscillator();
-          const g = ctx.createGain();
-          o.type = 'sine'; o.frequency.value = 880;
-          o.connect(g); g.connect(ctx.destination);
-          o.start(); g.gain.setValueAtTime(0.0001, ctx.currentTime);
-          g.gain.exponentialRampToValueAtTime(0.1, ctx.currentTime + 0.01);
-          g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
-          setTimeout(() => { o.stop(); ctx.close(); }, 600);
-        } catch (e) {}
-      };
-      es.addEventListener('order_created', (ev: any) => {
-        try {
-          const d = JSON.parse(ev.data);
-          addToast({ title: 'Novo pedido', message: 'Mesa ' + d.tableId, persist: false });
-          if (soundEnabled) playBeep();
-          if (currentUser && (currentUser.role==='admin' || currentUser.role==='waiter')) fetchWithAuth(`${API_BASE}/orders`).then(()=>{});
-          if (deviceTableId && String(deviceTableId)===String(d.tableId)) fetchOrdersByTable(String(d.tableId)).then(()=>{});
-        } catch(e){}
-      });
-      es.addEventListener('order_updated', (ev: any) => {
-        try {
-          const d = JSON.parse(ev.data);
-          addToast({ title: 'Pedido atualizado', message: '#' + d.orderId, persist: false });
-          if (soundEnabled) playBeep();
-          if (currentUser && (currentUser.role==='admin' || currentUser.role==='waiter')) fetchWithAuth(`${API_BASE}/orders`).then(()=>{});
-          if (deviceTableId && String(deviceTableId)===String(d.tableId)) fetchOrdersByTable(String(d.tableId)).then(()=>{});
-        } catch(e){}
-      });
-      es.addEventListener('table_updated', (ev: any) => {
-        try {
-          const d = JSON.parse(ev.data);
-          addToast({ title: 'Mesa atualizada', message: 'Mesa ID ' + d.tableId, persist: false });
-          if (soundEnabled) playBeep();
-          fetchWithAuth(`${API_BASE}/tables`).then(async r => { if (r && r.ok) setTables(await r.json()); });
-        } catch(e){}
-      });
-      es.addEventListener('feedback_created', (ev: any) => {
-        try {
-          const d = JSON.parse(ev.data);
-          addToast({ title: 'Nova avaliação', message: 'Mesa ' + d.tableNumber, persist: false });
-          if (soundEnabled) playBeep();
-          if (currentUser && currentUser.role==='admin') fetchWithAuth(`${API_BASE}/feedbacks`).then(async r=>{ if (r && r.ok) setFeedbacks(await r.json()); });
-        } catch(e){}
-      });
-      es.onerror = () => { es.close(); };
-    } catch (e) {}
+
+    // Notifications: create SSE only if backend reachable
+    (async () => {
+      try {
+        const ping = await fetch(`${API_BASE}`);
+        if (!ping.ok) return;
+        const es = new EventSource(`${API_BASE}/notifications/stream`);
+        const playBeep = () => {
+          try {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = 'sine'; o.frequency.value = 880;
+            o.connect(g); g.connect(ctx.destination);
+            o.start(); g.gain.setValueAtTime(0.0001, ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.1, ctx.currentTime + 0.01);
+            g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
+            setTimeout(() => { o.stop(); ctx.close(); }, 600);
+          } catch (e) {}
+        };
+        es.addEventListener('order_created', (ev: any) => {
+          try {
+            const d = JSON.parse(ev.data);
+            addToast({ title: 'Novo pedido', message: 'Mesa ' + d.tableId, persist: false });
+            if (soundEnabled) playBeep();
+            if (currentUser && (currentUser.role==='admin' || currentUser.role==='waiter')) fetchWithAuth(`${API_BASE}/orders`).then(()=>{});
+            if (deviceTableId && String(deviceTableId)===String(d.tableId)) fetchOrdersByTable(String(d.tableId)).then(()=>{});
+          } catch(e){}
+        });
+        es.addEventListener('order_updated', (ev: any) => {
+          try {
+            const d = JSON.parse(ev.data);
+            addToast({ title: 'Pedido atualizado', message: '#' + d.orderId, persist: false });
+            if (soundEnabled) playBeep();
+            if (currentUser && (currentUser.role==='admin' || currentUser.role==='waiter')) fetchWithAuth(`${API_BASE}/orders`).then(()=>{});
+            if (deviceTableId && String(deviceTableId)===String(d.tableId)) fetchOrdersByTable(String(d.tableId)).then(()=>{});
+          } catch(e){}
+        });
+        es.addEventListener('table_updated', (ev: any) => {
+          try {
+            const d = JSON.parse(ev.data);
+            addToast({ title: 'Mesa atualizada', message: 'Mesa ID ' + d.tableId, persist: false });
+            if (soundEnabled) playBeep();
+            fetchWithAuth(`${API_BASE}/tables`).then(async r => { if (r && r.ok) setTables(await r.json()); });
+          } catch(e){}
+        });
+        es.addEventListener('feedback_created', (ev: any) => {
+          try {
+            const d = JSON.parse(ev.data);
+            addToast({ title: 'Nova avaliação', message: 'Mesa ' + d.tableNumber, persist: false });
+            if (soundEnabled) playBeep();
+            if (currentUser && currentUser.role==='admin') fetchWithAuth(`${API_BASE}/feedbacks`).then(async r=>{ if (r && r.ok) setFeedbacks(await r.json()); });
+          } catch(e){}
+        });
+        es.onerror = () => { es.close(); };
+      } catch (e) {}
+    })();
   }, []);
 
   // When accessToken or currentUser changes, fetch protected resources for admins
@@ -399,6 +326,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!accessToken || !currentUser) return;
     (async () => {
       try {
+        // refresh establishment info after login to ensure tenant header and theme are correct
+        try {
+          const estRes = await fetchWithAuth(`${API_BASE}/establishment`);
+          if (estRes && estRes.ok) {
+            const estData = await estRes.json();
+            setEstablishment({ ...estData, theme: { ...INITIAL_THEME, ...(estData.theme || {}) } });
+          }
+        } catch (e) {}
         if (currentUser.role === 'admin') {
           const [orderRes, userRes] = await Promise.all([
             fetchWithAuth(`${API_BASE}/orders`).catch(() => []),
@@ -813,7 +748,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       await fetch(`${API_BASE}/auth/logout`, { method: 'POST', credentials: 'include' });
     } catch (e) {}
-    try { localStorage.removeItem('hasRefresh'); } catch(e) {}
+    try { localStorage.removeItem('accessToken'); } catch(e) {}
     setAccessToken(null);
     setCurrentUser(null);
   };

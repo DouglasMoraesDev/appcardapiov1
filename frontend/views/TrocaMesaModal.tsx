@@ -49,8 +49,9 @@ const TrocaMesaModal: React.FC<{ deviceTableId?: string | null; onLiberar: () =>
       } catch (e) {}
       // salva token/usuario no contexto para entrar como garçom
       try { setAccessToken(data.accessToken); } catch (e) {}
+      try { localStorage.setItem('accessToken', data.accessToken); } catch(e) {}
       try { setCurrentUser({ id: String(data.user.id), name: data.user.name, role: data.user.role } as any); } catch(e) {}
-      try { localStorage.setItem('hasRefresh', '1'); } catch(e) {}
+      try { localStorage.removeItem('refreshTokenDev'); } catch(e) {}
       setDeviceTableId(null);
       onLiberar();
       // redireciona para painel do garçom já autenticado

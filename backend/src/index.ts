@@ -16,6 +16,8 @@ import authRouter from './routes/auth';
 import debugRouter from './routes/debug';
 import { registerClient } from './notifications';
 import path from 'path';
+import { connectPrisma } from './prisma';
+import { isPrismaConnected } from './prisma';
 
 dotenv.config();
 
@@ -70,6 +72,10 @@ app.use(cookieParser());
 // Resolve tenant early for all requests (header/query/domain/user)
 app.use(resolveTenant);
 
+// Try to connect to database early (logs but doesn't abort startup)
+// Use higher retry count and backoff to tolerate transient network issues
+connectPrisma(10, 5000).catch(() => {});
+
 app.use('/api/products', productsRouter);
 app.use('/api/categories', categoriesRouter);
 app.use('/api/users', usersRouter);
@@ -89,6 +95,11 @@ app.get('/api/notifications/stream', (req, res) => {
 // API root
 app.get('/api', (req, res) => res.send({ ok: true, api: '/api' }));
 
+// Health endpoint: indicates if API can reach the database
+app.get('/api/health', (req, res) => {
+	return res.send({ ok: true, db: isPrismaConnected() });
+});
+
 // Serve frontend static files from frontend/dist when present
 const staticPath = path.join(__dirname, '..', '..', 'frontend', 'dist');
 try {
@@ -107,5 +118,11 @@ app.listen(port, '0.0.0.0', () => console.log(`Server running on port ${port}`))
 app.use((err: any, req: any, res: any, next: any) => {
 	logger.error(err);
 	if (res.headersSent) return next(err);
+	// Prisma DB unreachable errors -> respond 503 Service Unavailable
+	const code = err?.code || err?.name;
+	const msg = (err as any)?.message || '';
+	if (code === 'P1001' || code === 'PrismaClientInitializationError' || msg.includes("Can't reach database server")) {
+		return res.status(503).json({ error: 'Database unavailable' });
+	}
 	return res.status(500).json({ error: 'Internal server error' });
 });

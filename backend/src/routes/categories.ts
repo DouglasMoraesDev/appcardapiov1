@@ -27,7 +27,8 @@ const categorySchema = z.object({ name: z.string().min(1) });
 
 router.post('/', authenticate, authorize(['admin']), setEstablishmentOnCreate, generalLimiter, validateBody(categorySchema), async (req, res) => {
   const { name } = req.body;
-  const cat = await prisma.category.create({ data: { name } });
+  const establishmentId = req.body?.establishmentId ?? (req as any).user?.establishmentId ?? null;
+  const cat = await prisma.category.create({ data: { name, establishmentId } });
   res.json(cat);
 });
 

@@ -4,7 +4,8 @@
   "scripts": {
     "start": "npm --prefix backend run start",
     "build": "npm --prefix frontend run build && npm --prefix backend run build",
-    "build-and-start": "npm --prefix frontend run build && npm --prefix backend run build && npm --prefix backend start"
+    "build-and-start": "npm --prefix frontend run build && npm --prefix backend run build && npm --prefix backend start",
+    "e2e": "node scripts/e2e-test.js"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

@@ -6,133 +6,148 @@ datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
+
 model Theme {
-  id         Int    @id @default(autoincrement())
-  background String
-  card       String
-  text       String
-  primary    String
-  accent     String
+  id            Int            @id @default(autoincrement())
+  background    String
+  card          String
+  text          String
+  primary       String
+  accent        String
   establishment Establishment?
 }
 
 model Establishment {
-  id            Int      @id @default(autoincrement())
+  id            Int        @id @default(autoincrement())
   name          String
   address       String?
   cep           String?
   cpfCnpj       String?
   logo          String?
-  serviceCharge Int      @default(10)
-  adminUserId   Int?    @unique
-  adminUser     User?    @relation(name: "EstablishmentAdmin", fields: [adminUserId], references: [id])
-  themeId       Int?     @unique
-  theme         Theme?   @relation(fields: [themeId], references: [id])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  users         User[]    @relation(name: "UserEstablishment")
+  serviceCharge Int        @default(10)
+  adminUserId   Int?       @unique
+  themeId       Int?       @unique
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
   categories    Category[]
+  adminUser     User?      @relation("EstablishmentAdmin", fields: [adminUserId], references: [id])
+  theme         Theme?     @relation(fields: [themeId], references: [id])
+  feedbacks     Feedback[]
   products      Product[]
   tables        Table[]
+  users         User[]     @relation("UserEstablishment")
   orders        Order[]
-  feedbacks     Feedback[]
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  name      String
-  username  String?  @unique
-  password  String?
-  role      String
-  pin       String?
+  id              Int            @id @default(autoincrement())
+  name            String
+  username        String?        @unique
+  password        String?
+  role            String
+  pin             String?
+  createdAt       DateTime       @default(now())
   establishmentId Int?
-  establishment Establishment? @relation(name: "UserEstablishment", fields: [establishmentId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  refreshTokens RefreshToken[]
-  adminOf Establishment? @relation(name: "EstablishmentAdmin")
+  adminOf         Establishment? @relation("EstablishmentAdmin")
+  refreshTokens   RefreshToken[]
+  establishment   Establishment? @relation("UserEstablishment", fields: [establishmentId], references: [id], onDelete: Cascade)
+
+  @@index([establishmentId], map: "User_establishmentId_fkey")
 }
 
 model Category {
-  id       Int       @id @default(autoincrement())
-  name     String    @unique
-  products Product[]
+  id              Int            @id @default(autoincrement())
+  name            String         @unique
   establishmentId Int?
-  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  establishment   Establishment? @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  products        Product[]
+
   @@index([establishmentId])
 }
 
 model Product {
-  id          Int       @id @default(autoincrement())
-  name        String
-  description String?  @db.Text
-  price       Float
-  image       String?
-  categoryId  Int?
-  isHighlight Boolean   @default(false)
-  category    Category? @relation(fields: [categoryId], references: [id])
-  createdAt   DateTime  @default(now())
-  orderItems   OrderItem[]
+  id              Int            @id @default(autoincrement())
+  name            String
+  description     String?        @db.Text
+  price           Float
+  image           String?
+  categoryId      Int?
+  isHighlight     Boolean        @default(false)
+  createdAt       DateTime       @default(now())
   establishmentId Int?
-  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  orderItems      OrderItem[]
+  category        Category?      @relation(fields: [categoryId], references: [id])
+  establishment   Establishment? @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+
   @@index([establishmentId])
+  @@index([categoryId], map: "Product_categoryId_fkey")
 }
 
 model Table {
-  id     Int    @id @default(autoincrement())
-  number Int    @unique
-  status String
-  orders Order[]
+  id              Int            @id @default(autoincrement())
+  number          Int            @unique
+  status          String
   establishmentId Int?
-  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  establishment   Establishment? @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  orders          Order[]
+
   @@index([establishmentId])
 }
 
 model Order {
-  id            Int         @id @default(autoincrement())
-  tableId       Int
-  table         Table       @relation(fields: [tableId], references: [id])
-  items         OrderItem[]
-  status        String
-  timestamp     DateTime    @default(now())
-  total         Float
-  serviceValue  Float?
-  servicePaid   Boolean     @default(false)
-  paymentMethod String?
+  id              Int            @id @default(autoincrement())
+  tableId         Int
+  status          String
+  timestamp       DateTime       @default(now())
+  total           Float
+  serviceValue    Float?
+  servicePaid     Boolean        @default(false)
+  paymentMethod   String?
   establishmentId Int?
-  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  items           OrderItem[]
+  establishment   Establishment? @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  table           Table          @relation(fields: [tableId], references: [id])
+
   @@index([establishmentId])
+  @@index([tableId], map: "orders_tableId_fkey")
   @@map("orders")
 }
 
 model OrderItem {
-  id          Int     @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   orderId     Int
-  order       Order   @relation(fields: [orderId], references: [id])
   productId   Int?
-  product     Product? @relation(fields: [productId], references: [id])
   quantity    Int
   name        String
   price       Float
   status      String
-  observation String? @db.Text
+  observation String?  @db.Text
+  order       Order    @relation(fields: [orderId], references: [id])
+  product     Product? @relation(fields: [productId], references: [id])
+
+  @@index([orderId], map: "OrderItem_orderId_fkey")
+  @@index([productId], map: "OrderItem_productId_fkey")
 }
 
 model Feedback {
-  id          Int      @id @default(autoincrement())
-  tableNumber Int
-  rating      Int
-  comment     String? @db.Text
-  timestamp   DateTime @default(now())
+  id              Int            @id @default(autoincrement())
+  tableNumber     Int
+  rating          Int
+  comment         String?        @db.Text
+  timestamp       DateTime       @default(now())
   establishmentId Int?
-  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  establishment   Establishment? @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+
   @@index([establishmentId])
 }
 
 model RefreshToken {
-  id         Int      @id @default(autoincrement())
-  token      String   @unique
-  userId     Int
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "RefreshToken_userId_fkey")
 }

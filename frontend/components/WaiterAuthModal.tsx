@@ -37,8 +37,8 @@ export default function WaiterAuthModal({ open, onClose, onSuccess }: Props) {
       const data = await res.json();
       // set token and current user in context so fetchWithAuth uses it
       try { setAccessToken(data.accessToken); } catch (e) {}
+      try { localStorage.setItem('accessToken', data.accessToken); } catch(e) {}
       try { setCurrentUser({ id: String(data.user.id), name: data.user.name, role: data.user.role } as any); } catch (e) {}
-      try { localStorage.setItem('hasRefresh', '1'); } catch(e) {}
       // success
       onSuccess();
     } catch (e) {

@@ -8,7 +8,7 @@ const router = Router();
 
 router.get('/', async (req, res) => {
   try {
-    const tenantId = (req as any).tenantId ?? null;
+    const tenantId = (req as any).tenantId ?? (req as any).user?.establishmentId ?? null;
     if (tenantId) {
       const e = await prisma.establishment.findUnique({ where: { id: Number(tenantId) }, include: { theme: true, adminUser: true } });
       return res.json(e);
